@@ -4,33 +4,80 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Área de Membros | Evandro Avila</title>
-  <meta name="description" content="Acesse a área de membros de Evandro Avila.">
+  <meta name="description" content="Entre na sua conta para acessar a área de membros de Evandro Avila.">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <main class="member-area">
-    <section class="access-card" aria-labelledby="page-title">
-      <header class="brand">
-        <div class="brand__logo" aria-label="Espaço reservado para a logo oficial">
-          <!-- LOGO OFICIAL SERÁ INSERIDA APÓS O MERGE -->
-        </div>
-        <p class="brand__name">Evandro Avila</p>
-      </header>
+  <main class="login-layout">
+    <section class="login-panel" aria-labelledby="page-title">
+      <div class="login-panel__inner">
+        <header class="brand" aria-label="Evandro Avila">
+          <div class="brand__mark" aria-hidden="true"></div>
+          <span class="brand__name">Evandro Avila</span>
+          <!-- Espaço preparado para receber a logo oficial sem alterar o layout. -->
+        </header>
 
-      <div class="access-card__content">
-        <p class="eyebrow">Conteúdo exclusivo</p>
-        <h1 id="page-title">Área de Membros</h1>
-        <p class="intro">Bem-vindo. Seu conteúdo está reunido em um ambiente simples, organizado e feito para você.</p>
-        <a class="access-button" href="#conteudo">Acessar conteúdo</a>
+        <div class="login-content">
+          <div class="login-heading">
+            <h1 id="page-title">Área de Membros</h1>
+            <p>Entre na sua conta para acessar seus conteúdos.</p>
+          </div>
+
+          <form class="login-form" id="login-form" novalidate>
+            <div class="field">
+              <label for="email">E-mail</label>
+              <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="seuemail@exemplo.com" aria-describedby="email-error" required>
+              <p class="field__error" id="email-error" aria-live="polite"></p>
+            </div>
+
+            <div class="field">
+              <label for="password">Senha</label>
+              <div class="password-input">
+                <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Sua senha" aria-describedby="password-error" required>
+                <button class="password-toggle" id="password-toggle" type="button" aria-label="Mostrar senha" aria-pressed="false">
+                  <svg class="icon-eye" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                    <circle cx="12" cy="12" r="2.5"></circle>
+                  </svg>
+                </button>
+              </div>
+              <p class="field__error" id="password-error" aria-live="polite"></p>
+            </div>
+
+            <button class="forgot-link" id="forgot-password" type="button">Esqueci minha senha</button>
+            <button class="submit-button" type="submit">Entrar</button>
+            <p class="member-note">Acesso exclusivo para membros.</p>
+          </form>
+        </div>
       </div>
     </section>
 
-    <section class="content-preview" id="conteudo" aria-labelledby="content-title">
-      <p class="eyebrow">Sua jornada continua aqui</p>
-      <h2 id="content-title">Conteúdo da área de membros</h2>
-      <p>Em breve, os seus materiais estarão disponíveis neste espaço.</p>
-    </section>
+    <aside class="visual-panel" aria-hidden="true">
+      <!-- FUTURA IMAGEM INSTITUCIONAL DA ÁREA DE MEMBROS -->
+      <div class="visual-panel__image"></div>
+    </aside>
   </main>
+
+  <div class="modal" id="recovery-modal" role="dialog" aria-modal="true" aria-labelledby="recovery-title" aria-describedby="recovery-description" hidden>
+    <div class="modal__backdrop" data-close-modal></div>
+    <div class="modal__card">
+      <button class="modal__close" type="button" aria-label="Fechar recuperação de senha" data-close-modal>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+      </button>
+      <div class="modal__accent" aria-hidden="true"></div>
+      <h2 id="recovery-title">Recuperação de senha</h2>
+      <p id="recovery-description">Informe seu e-mail para receber as instruções de recuperação.</p>
+      <form id="recovery-form" novalidate>
+        <div class="field">
+          <label for="recovery-email">E-mail</label>
+          <input id="recovery-email" name="recovery-email" type="email" inputmode="email" autocomplete="email" placeholder="seuemail@exemplo.com" aria-describedby="recovery-email-error" required>
+          <p class="field__error" id="recovery-email-error" aria-live="polite"></p>
+        </div>
+        <button class="submit-button" type="submit">Enviar instruções</button>
+        <p class="modal__status" id="recovery-status" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </div>
 
   <script src="js/app.js" defer></script>
 </body>
