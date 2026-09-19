@@ -46,11 +46,13 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .brand {
-  align-self: flex-start;
-  width: min(100%, 190px);
+  display: flex;
+  width: 100%;
+  max-width: 420px;
+  justify-content: center;
 }
 
-.brand__logo { display: block; width: 100%; height: auto; }
+.brand__logo { display: block; width: clamp(220px, 20vw, 300px); max-width: 100%; height: auto; }
 
 .login-content {
   display: flex;
@@ -273,7 +275,6 @@ body.modal-open { overflow: hidden; }
 
 @media (min-width: 681px) and (max-height: 760px) {
   .login-panel__inner { padding-block: 20px; }
-  .brand { width: 150px; }
   .login-content { padding-block: 14px 10px; }
   .login-heading { margin-bottom: 18px; }
   .login-heading p { margin-top: 8px; }
@@ -291,6 +292,8 @@ body.modal-open { overflow: hidden; }
   .login-layout { width: 100%; height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
   .login-panel { min-height: 100vh; min-height: 100dvh; }
   .login-panel__inner { width: 100%; padding: 26px 24px; }
+  .brand { max-width: 480px; margin: 0 auto; }
+  .brand__logo { width: clamp(180px, 55vw, 220px); }
   .login-content { max-width: 480px; margin: 0 auto; padding: 48px 0 32px; }
   .login-heading { margin-bottom: 32px; }
   .visual-panel { display: none; }
