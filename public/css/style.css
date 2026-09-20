@@ -164,55 +164,22 @@ h1 { color: var(--moss-800); font-size: calc(clamp(2rem, 3.1vw, 2.75rem) - 2px);
 .member-note { margin: 17px 0 0; color: #7a837e; font-size: 0.8rem; text-align: center; }
 
 .visual-panel {
-  position: relative;
+  display: flex;
   min-width: 0;
   height: 100%;
   overflow: hidden;
   border-left: 1px solid rgb(173 118 84 / 24%);
-  background:
-    radial-gradient(circle at 78% 19%, rgb(173 118 84 / 14%) 0 8%, transparent 8.2%),
-    radial-gradient(circle at 18% 82%, rgb(42 91 75 / 10%) 0 15%, transparent 15.2%),
-    linear-gradient(145deg, #fff 0%, #faf8f1 52%, #f3f1e8 100%);
+  align-items: center;
+  justify-content: center;
+  background: #fff;
 }
 
 .visual-panel__image {
-  position: absolute;
-  inset: 0;
-  background-position: center;
-  background-size: cover;
-  /* Para ativar a imagem futura: background-image: url("../assets/login-emagrecimento.webp"); */
-}
-
-.visual-panel__frame {
-  position: absolute;
-  inset: clamp(38px, 6vw, 92px);
-  border: 1px solid rgb(173 118 84 / 26%);
-  border-radius: clamp(22px, 3vw, 42px);
-  box-shadow: inset 0 0 0 10px rgb(255 255 255 / 22%);
-  pointer-events: none;
-}
-
-.visual-panel::before,
-.visual-panel::after {
-  position: absolute;
-  border-radius: 999px;
-  content: "";
-}
-
-.visual-panel::before {
-  top: 13%;
-  right: 9%;
-  width: clamp(70px, 10vw, 150px);
-  height: 5px;
-  background: rgb(42 91 75 / 48%);
-}
-
-.visual-panel::after {
-  right: 14%;
-  bottom: 12%;
-  width: clamp(100px, 17vw, 260px);
-  height: 2px;
-  background: rgb(173 118 84 / 55%);
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
 }
 
 :focus-visible { outline: 3px solid rgb(173 118 84 / 65%); outline-offset: 3px; }
