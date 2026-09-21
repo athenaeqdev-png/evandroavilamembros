@@ -15,7 +15,9 @@
   "env": {
     "preview": {
       "name": "evandroavilamembros-preview",
-      "route": { "pattern": "membros-preview.evandroavila.com.br", "custom_domain": true },
+      "routes": [
+        { "pattern": "membros-preview.evandroavila.com.br", "custom_domain": true }
+      ],
       "d1_databases": [{ "binding": "DB", "database_name": "membros-preview", "database_id": "PREVIEW_D1_DATABASE_ID" }],
       "vars": {
         "APP_ENV": "production",

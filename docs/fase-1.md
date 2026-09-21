@@ -91,11 +91,13 @@ na zona `evandroavila.com.br`.
    ADMIN_DATABASE='membros-preview' ADMIN_REMOTE=true npm run admin:create
    ```
 
-6. **Preview e domínio:** somente após autorização, publique com
-   `npx wrangler deploy --env preview`; no Worker `evandroavilamembros-preview`,
-   adicione a Custom Domain `membros-preview.evandroavila.com.br`. Esse host já é
-   o valor de `APP_ORIGIN` preparado na configuração. O domínio principal não é
-   alterado.
+6. **Preview e domínio:** confirme antes que não exista registro `A`, `AAAA` ou
+   `CNAME` ocupando `membros-preview.evandroavila.com.br` e publique com
+   `npx wrangler deploy --env preview`. O array `routes` do ambiente `preview`
+   declara esse hostname sem wildcard e com `custom_domain: true`; portanto, o
+   Wrangler cria ou atualiza a Custom Domain do Worker
+   `evandroavilamembros-preview`, sem usar uma Worker Route e sem alterar o
+   domínio principal.
 
 ## Validação manual
 
