@@ -1,6 +1,6 @@
 const csrf=()=>document.cookie.split(";").map(value=>value.trim()).find(value=>value.startsWith("csrf="))?.slice(5)||"";
 let mandatoryChange=false;
-fetch("/api/v1/auth/session",{cache:"no-store"}).then(async response=>{if(!response.ok){location.replace("/login");return}const data=await response.json();mandatoryChange=data.user.mustChangePassword}).catch(()=>location.replace("/login"));
+fetch("/api/v1/auth/session",{cache:"no-store"}).then(async response=>{if(!response.ok){location.replace("/login");return}const data=await response.json();mandatoryChange=data.user.mustChangePassword;const currentField=document.querySelector("#current-password-field"),current=document.querySelector("#current-password"),button=document.querySelector("#password-form .submit-button");if(mandatoryChange){currentField.hidden=true;current.required=false;document.querySelector("#profile-title").textContent="Crie sua senha definitiva";document.querySelector("#profile-description").textContent="Escolha a senha que você usará nos próximos acessos.";button.textContent="Salvar e entrar"}button.disabled=false}).catch(()=>location.replace("/login"));
 
 document.querySelectorAll(".password-toggle").forEach(toggle=>{
   toggle.addEventListener("click",()=>{

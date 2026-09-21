@@ -56,6 +56,10 @@ Secret Key. O widget de preview é outro recurso, autoriza somente
 `membros-preview.evandroavila.com.br` e continua usando
 `PREVIEW_TURNSTILE_SITE_KEY` e secrets do ambiente `preview`.
 
+O provisionamento de membros também requer o Send Email binding `EMAIL` e a
+variável `EMAIL_FROM` com um remetente validado no Email Routing. Consulte
+`docs/primeiro-acesso.md` para a configuração e o checklist de entrega.
+
 ## Ordem esperada
 
 O pipeline oficial segue esta ordem:
