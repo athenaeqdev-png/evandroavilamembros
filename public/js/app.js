@@ -1,116 +1,14 @@
-const loginForm = document.querySelector("#login-form");
-const emailInput = document.querySelector("#email");
-const passwordInput = document.querySelector("#password");
-const passwordToggle = document.querySelector("#password-toggle");
-const forgotPasswordButton = document.querySelector("#forgot-password");
-const recoveryModal = document.querySelector("#recovery-modal");
-const recoveryForm = document.querySelector("#recovery-form");
-const recoveryEmailInput = document.querySelector("#recovery-email");
-const recoveryStatus = document.querySelector("#recovery-status");
-
-let previouslyFocusedElement = null;
-
-function setFieldError(input, message) {
-  const error = document.querySelector(`#${input.getAttribute("aria-describedby")}`);
-  input.setAttribute("aria-invalid", String(Boolean(message)));
-  error.textContent = message;
-}
-
-function validateRequired(input, message) {
-  const isEmpty = !input.value.trim();
-  setFieldError(input, isEmpty ? message : "");
-  return !isEmpty;
-}
-
-function validateEmail(input) {
-  if (!validateRequired(input, "Informe seu e-mail.")) return false;
-
-  const isValid = input.validity.valid;
-  setFieldError(input, isValid ? "" : "Informe um e-mail válido.");
-  return isValid;
-}
-
-loginForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const emailIsValid = validateEmail(emailInput);
-  const passwordIsValid = validateRequired(passwordInput, "Informe sua senha.");
-
-  if (!emailIsValid) emailInput.focus();
-  else if (!passwordIsValid) passwordInput.focus();
-});
-
-[emailInput, passwordInput].forEach((input) => {
-  input.addEventListener("input", () => {
-    if (input.getAttribute("aria-invalid") === "true") {
-      if (input === emailInput) validateEmail(input);
-      else validateRequired(input, "Informe sua senha.");
-    }
-  });
-});
-
-passwordToggle.addEventListener("click", () => {
-  const showPassword = passwordInput.type === "password";
-  passwordInput.type = showPassword ? "text" : "password";
-  passwordToggle.setAttribute("aria-pressed", String(showPassword));
-  passwordToggle.setAttribute("aria-label", showPassword ? "Ocultar senha" : "Mostrar senha");
-  passwordInput.focus();
-});
-
-function openModal() {
-  previouslyFocusedElement = document.activeElement;
-  recoveryModal.hidden = false;
-  document.body.classList.add("modal-open");
-  recoveryEmailInput.focus();
-}
-
-function closeModal() {
-  recoveryModal.hidden = true;
-  document.body.classList.remove("modal-open");
-  recoveryForm.reset();
-  setFieldError(recoveryEmailInput, "");
-  recoveryStatus.textContent = "";
-  previouslyFocusedElement?.focus();
-}
-
-forgotPasswordButton.addEventListener("click", openModal);
-recoveryModal.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", closeModal));
-
-recoveryForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  recoveryStatus.textContent = "";
-
-  if (!validateEmail(recoveryEmailInput)) {
-    recoveryEmailInput.focus();
-    return;
-  }
-
-  recoveryStatus.textContent = "Funcionalidade de recuperação será ativada em breve.";
-});
-
-recoveryEmailInput.addEventListener("input", () => {
-  recoveryStatus.textContent = "";
-  if (recoveryEmailInput.getAttribute("aria-invalid") === "true") validateEmail(recoveryEmailInput);
-});
-
-document.addEventListener("keydown", (event) => {
-  if (recoveryModal.hidden) return;
-
-  if (event.key === "Escape") {
-    closeModal();
-    return;
-  }
-
-  if (event.key === "Tab") {
-    const focusableElements = [...recoveryModal.querySelectorAll("button, input")];
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements.at(-1);
-
-    if (event.shiftKey && document.activeElement === firstElement) {
-      event.preventDefault();
-      lastElement.focus();
-    } else if (!event.shiftKey && document.activeElement === lastElement) {
-      event.preventDefault();
-      firstElement.focus();
-    }
-  }
-});
+const app=document.querySelector("#app");
+const path=location.pathname.replace(/\/$/,"")||"/login";
+const pages={
+  "/login":{title:"Área de Membros",subtitle:"Entre na sua conta para continuar sua jornada.",kind:"login",submit:"Entrar"},
+  "/cadastro":{title:"Comece sua jornada",subtitle:"Crie sua conta para acessar a experiência Jornada Metabólica.",kind:"register",submit:"Criar minha conta"},
+  "/esqueci-senha":{title:"Recupere seu acesso",subtitle:"Informe o e-mail usado no cadastro. Enviaremos as próximas instruções.",kind:"forgot",submit:"Enviar instruções"}
+};
+const page=pages[path]||pages["/login"];
+const extra=page.kind==="register"?`<label>Nome completo<input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>`:"";
+const password=page.kind!=="forgot"?`<label>Senha<div class="password-input"><input name="password" type="password" autocomplete="${page.kind==="login"?"current-password":"new-password"}" minlength="12" maxlength="128" required><button type="button" class="password-toggle" aria-label="Mostrar senha">Exibir</button></div><small>${page.kind==="register"?"Use pelo menos 12 caracteres.":""}</small></label>`:"";
+app.innerHTML=`<div class="auth-shell"><section class="auth-panel"><div class="auth-inner"><a href="/login" class="brand"><img src="/logo-oficial.png" alt="Evandro Ávila"></a><div class="auth-content"><p class="eyebrow">Jornada Metabólica</p><h1>${page.title}</h1><p class="lead">${page.subtitle}</p><form id="auth-form">${extra}<label>E-mail<input name="email" type="email" autocomplete="email" inputmode="email" required></label>${password}<div id="turnstile"></div><p id="status" class="form-status" role="alert"></p><button class="submit-button">${page.submit}</button></form><nav class="auth-links">${page.kind==="login"?`<a href="/esqueci-senha">Esqueci minha senha</a><span>Não tem conta? <a href="/cadastro">Cadastre-se</a></span>`:`<a href="/login">← Voltar para o login</a>`}</nav></div></div></section><aside class="visual-panel"><img src="/capa.png" alt=""></aside></div>`;
+fetch("/api/v1/config").then(response=>response.json()).then(config=>{const render=()=>window.turnstile?window.turnstile.render("#turnstile",{sitekey:config.turnstileSiteKey,theme:"light"}):setTimeout(render,100);render()}).catch(()=>{});
+document.querySelector(".password-toggle")?.addEventListener("click",event=>{const input=document.querySelector('[name="password"]');input.type=input.type==="password"?"text":"password";event.currentTarget.textContent=input.type==="password"?"Exibir":"Ocultar"});
+document.querySelector("#auth-form").addEventListener("submit",async event=>{event.preventDefault();const button=event.currentTarget.querySelector(".submit-button"),status=document.querySelector("#status"),data=Object.fromEntries(new FormData(event.currentTarget));data.turnstileToken=data["cf-turnstile-response"]||"dev-bypass";delete data["cf-turnstile-response"];button.disabled=true;status.textContent="";const endpoint=page.kind==="register"?"register":page.kind==="forgot"?"forgot-password":"login";try{const response=await fetch(`/api/v1/auth/${endpoint}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(data)});const result=await response.json();if(!response.ok)throw new Error(result.error);if(page.kind==="forgot"){status.classList.add("success");status.textContent=result.message}else location.assign("/inicio")}catch(error){status.textContent=error.message||"Não foi possível continuar."}finally{button.disabled=false}});
