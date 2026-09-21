@@ -108,12 +108,25 @@ jobs:
           app="$(curl --fail "$origin$asset_path")"
           ! grep -Eq 'localhost|membros-preview' <<<"$app"
           ! grep -Fq 'Cadastre-se' <<<"$app"
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$origin/cadastro")" = '302'
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+          cadastro_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$origin/cadastro")"
+          cadastro_slash_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$origin/cadastro/")"
+          login_slash_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$origin/login/")"
+          register_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
             -H "Origin: $origin" -H 'Content-Type: application/json' \
             --data '{"email":"smoke@example.com","password":"senha-segura-123","name":"Membro"}' \
-            "$origin/api/v1/auth/register")" = '404'
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "$origin/api/v1/auth/register")"
+          login_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
             -H "Origin: $origin" -H 'Content-Type: application/json' \
             --data '{"identifier":"smoke@example.com","password":"invalid","turnstileToken":"invalid"}' \
-            "$origin/api/v1/auth/login")" = '400'
+            "$origin/api/v1/auth/login")"
+          printf '%s\n' \
+            "/cadastro status: $cadastro_status" \
+            "/cadastro/ status: $cadastro_slash_status" \
+            "/login/ status: $login_slash_status" \
+            "/api/v1/auth/register status: $register_status" \
+            "/api/v1/auth/login status: $login_status"
+          test "$cadastro_status" = '302'
+          test "$cadastro_slash_status" = '302'
+          test "$login_slash_status" = '200'
+          test "$register_status" = '404'
+          test "$login_status" = '400'
