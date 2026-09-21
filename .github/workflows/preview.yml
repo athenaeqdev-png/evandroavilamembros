@@ -52,14 +52,12 @@ jobs:
           PREVIEW_TURNSTILE_SITE_KEY: ${{ vars.PREVIEW_TURNSTILE_SITE_KEY }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
-          PREVIEW_ADMIN_PASSWORD: ${{ secrets.PREVIEW_ADMIN_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
-          for name in PREVIEW_D1_DATABASE_ID PREVIEW_TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY PASSWORD_PEPPER PREVIEW_ADMIN_PASSWORD; do
+          for name in PREVIEW_D1_DATABASE_ID PREVIEW_TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY PASSWORD_PEPPER; do
             test -n "${!name}" || { echo "Missing preview Actions secret/variable: $name"; exit 1; }
           done
-          test "${#PREVIEW_ADMIN_PASSWORD}" -ge 12 || { echo 'PREVIEW_ADMIN_PASSWORD must contain at least 12 characters'; exit 1; }
           node - <<'NODE'
           import fs from 'node:fs';
           const path = 'wrangler.jsonc';
@@ -91,15 +89,12 @@ jobs:
         if: inputs.operation == 'deploy'
         run: npm run db:migrate:preview
 
-      - name: Create initial preview administrator
+      - name: Update existing preview administrator
         if: inputs.operation == 'deploy'
         env:
-          ADMIN_PHONE: '11999332373'
-          ADMIN_PASSWORD: ${{ secrets.PREVIEW_ADMIN_PASSWORD }}
-          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
           ADMIN_DATABASE: membros-preview
           ADMIN_REMOTE: 'true'
-        run: npm run admin:create
+        run: npm run admin:update:preview
 
       - name: Deploy preview Worker and custom domain
         if: inputs.operation == 'deploy'
