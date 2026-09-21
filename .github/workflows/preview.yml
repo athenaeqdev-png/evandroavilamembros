@@ -76,7 +76,9 @@ jobs:
 
       - name: Validate Wrangler preview schema
         if: inputs.operation == 'deploy'
-        run: npx wrangler deploy --env preview --dry-run --outdir .wrangler/preview-dry-run
+        run: |
+          npm run assets:prepare
+          npx wrangler deploy --env preview --dry-run --outdir .wrangler/preview-dry-run
 
       - name: Configure Worker secrets
         if: inputs.operation == 'deploy'
@@ -114,13 +116,25 @@ jobs:
           origin='https://membros-preview.evandroavila.com.br'
           for attempt in {1..12}; do
             html="$(curl --fail --silent --show-error "$origin/login")" &&
-            app="$(curl --fail --silent --show-error "$origin/js/app.js?deploy=${GITHUB_SHA}")" &&
             config="$(curl --fail --silent --show-error "$origin/api/v1/config")" && break
             test "$attempt" -eq 12 && exit 1
             sleep 5
           done
-          grep -Fq 'app.js?v=20260921-turnstile' <<<"$html"
+          asset_path="$(sed -n 's|.*src="\(/js/app\.[a-f0-9]\{12\}\.js\)".*|\1|p' <<<"$html")"
+          test -n "$asset_path"
+          app="$(curl --fail --silent --show-error "$origin$asset_path")"
           grep -Fq 'E-mail ou telefone' <<<"$app"
+          grep -Fq 'fetch(`/api/v1/auth/${endpoint}`' <<<"$app"
+          expected_hash="$(sha256sum public/js/app.js | cut -c1-12)"
+          test "$asset_path" = "/js/app.${expected_hash}.js"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H "Origin: $origin" -H 'Content-Type: application/json' \
+            --data '{"identifier":"smoke@example.com","password":"invalid","turnstileToken":"invalid"}' \
+            "$origin/api/v1/auth/login")" = '400'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H "Origin: $origin" -H 'Content-Type: application/json' \
+            --data '{"email":"smoke@example.com","turnstileToken":"invalid"}' \
+            "$origin/api/v1/auth/forgot-password")" = '200'
           CONFIG="$config" node - <<'NODE'
           const config = JSON.parse(process.env.CONFIG);
           if (config.turnstileSiteKey !== process.env.PREVIEW_TURNSTILE_SITE_KEY) {

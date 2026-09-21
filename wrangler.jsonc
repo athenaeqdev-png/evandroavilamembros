@@ -3,7 +3,7 @@
   "name": "evandroavilamembros",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-19",
-  "assets": { "binding": "ASSETS", "directory": "./public", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+  "assets": { "binding": "ASSETS", "directory": "./dist", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
   "d1_databases": [{ "binding": "DB", "database_name": "membros-local", "database_id": "D1_DATABASE_ID" }],
   "vars": {
     "APP_ENV": "development",

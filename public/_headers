@@ -1,0 +1,23 @@
+/
+  Cache-Control: no-store
+
+/login
+  Cache-Control: no-store
+
+/cadastro
+  Cache-Control: no-store
+
+/esqueci-senha
+  Cache-Control: no-store
+
+/inicio
+  Cache-Control: no-store
+
+/perfil
+  Cache-Control: no-store
+
+/js/app.*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/css/*
+  Cache-Control: no-cache
