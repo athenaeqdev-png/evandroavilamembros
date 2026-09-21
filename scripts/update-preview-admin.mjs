@@ -10,10 +10,10 @@ if (database !== "membros-preview" || !remote) {
 
 const sql = `
 UPDATE users
-SET email = 'nutrievandroavila@gmail.com'
+SET email = 'nutrievandroavila@gmail.com',
+    phone = '+5511999332373'
 WHERE role = 'admin'
   AND deleted_at IS NULL
-  AND email <> 'nutrievandroavila@gmail.com'
   AND (SELECT COUNT(*) FROM users WHERE role = 'admin' AND deleted_at IS NULL) = 1;
 `;
 
