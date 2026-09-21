@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { hashPassword, randomToken, verifyPassword } from "../src/security";
 import { normalizeLoginIdentifier, normalizePhone } from "../src/index";
 describe("segurança", () => {
@@ -8,5 +9,11 @@ describe("segurança", () => {
   it("prepara e-mail ou telefone como identificador do mesmo login", () => {
     expect(normalizeLoginIdentifier(" NUTRIEVANDROAVILA@GMAIL.COM ")).toEqual({ email: "nutrievandroavila@gmail.com", phone: "" });
     expect(normalizeLoginIdentifier("(11) 99933-2373")).toEqual({ email: "(11) 99933-2373", phone: "+5511999332373" });
+  });
+  it("publica o formulário com identificação dupla e token explícito do Turnstile", () => {
+    const app = readFileSync(new URL("../public/js/app.js", import.meta.url), "utf8");
+    expect(app).toContain("E-mail ou telefone");
+    expect(app).toContain("data.turnstileToken=turnstileToken");
+    expect(app).not.toContain('||"dev-bypass"');
   });
 });

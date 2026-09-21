@@ -21,6 +21,12 @@ function secureHeaders(response: Response): Response {
   headers.set("content-security-policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self'");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
+function assetCacheHeaders(response: Response, pathname: string): Response {
+  const headers = new Headers(response.headers);
+  if (pathname.endsWith(".html") || !pathname.includes(".")) headers.set("cache-control", "no-store");
+  else if (pathname.endsWith(".js") || pathname.endsWith(".css")) headers.set("cache-control", "no-cache");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
 async function body(request: Request): Promise<Record<string, unknown> | null> { try { return await request.json() as Record<string, unknown>; } catch { return null; } }
 function sameOrigin(request: Request, env: Env) { const origin = request.headers.get("origin"), fetchSite=request.headers.get("sec-fetch-site"); return origin ? origin === env.APP_ORIGIN : fetchSite === "same-origin"; }
 async function turnstile(token: unknown, request: Request, env: Env) {
@@ -47,7 +53,10 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
   if (!sameOrigin(request, env) && request.method !== "GET") return json({ error: "Origem inválida." }, 403);
   const data = request.method === "GET" ? null : await body(request);
   if (request.method !== "GET" && !data) return json({ error: "JSON inválido." }, 400);
-  if (path === "/api/v1/config" && request.method === "GET") return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY });
+  if (path === "/api/v1/config" && request.method === "GET") {
+    if (!/^[01]x[A-Za-z0-9_-]{10,}$/.test(env.TURNSTILE_SITE_KEY || "")) return json({ error: "Configuração de segurança indisponível." }, 503);
+    return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY });
+  }
   if (path === "/api/v1/auth/register" && request.method === "POST") {
     const email = normalizeEmail(data?.email), password = data?.password, name = typeof data?.name === "string" ? data.name.trim() : "";
     if (!validEmail(email) || typeof password !== "string" || password.length < 12 || password.length > 128 || name.length < 2 || name.length > 100) return json({ error: "Confira nome, e-mail e senha (mínimo de 12 caracteres)." }, 422);
@@ -72,4 +81,4 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
   return json({ error: "Rota não encontrada." }, 404);
 }
 
-export default { async fetch(request: Request, env: Env): Promise<Response> { const url=new URL(request.url); let response:Response; if(url.pathname.startsWith("/api/")) response=await api(request,env,url.pathname); else if(url.pathname==="/inicio"||url.pathname==="/perfil"){ if(!await currentUser(request,env)) response=Response.redirect(`${url.origin}/login`,302); else response=await env.ASSETS.fetch(new Request(new URL(url.pathname==="/perfil"?"/perfil.html":"/inicio.html",url),request)); } else { response=await env.ASSETS.fetch(request); } return secureHeaders(response); } };
+export default { async fetch(request: Request, env: Env): Promise<Response> { const url=new URL(request.url); let response:Response; if(url.pathname.startsWith("/api/")) response=await api(request,env,url.pathname); else if(url.pathname==="/inicio"||url.pathname==="/perfil"){ if(!await currentUser(request,env)) response=Response.redirect(`${url.origin}/login`,302); else response=await env.ASSETS.fetch(new Request(new URL(url.pathname==="/perfil"?"/perfil.html":"/inicio.html",url),request)); } else { response=await env.ASSETS.fetch(request); } return secureHeaders(assetCacheHeaders(response,url.pathname)); } };

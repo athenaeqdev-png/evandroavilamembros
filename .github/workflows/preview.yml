@@ -58,6 +58,10 @@ jobs:
           for name in PREVIEW_D1_DATABASE_ID PREVIEW_TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY PASSWORD_PEPPER; do
             test -n "${!name}" || { echo "Missing preview Actions secret/variable: $name"; exit 1; }
           done
+          [[ "$PREVIEW_TURNSTILE_SITE_KEY" == 0x* ]] || {
+            echo 'PREVIEW_TURNSTILE_SITE_KEY must be the Site Key (starting with 0x), not an Account ID.'
+            exit 1
+          }
           node - <<'NODE'
           import fs from 'node:fs';
           const path = 'wrangler.jsonc';
@@ -99,3 +103,27 @@ jobs:
       - name: Deploy preview Worker and custom domain
         if: inputs.operation == 'deploy'
         run: npx wrangler deploy --env preview
+
+      - name: Smoke test published preview
+        if: inputs.operation == 'deploy'
+        env:
+          PREVIEW_TURNSTILE_SITE_KEY: ${{ vars.PREVIEW_TURNSTILE_SITE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://membros-preview.evandroavila.com.br'
+          for attempt in {1..12}; do
+            html="$(curl --fail --silent --show-error "$origin/login")" &&
+            app="$(curl --fail --silent --show-error "$origin/js/app.js?deploy=${GITHUB_SHA}")" &&
+            config="$(curl --fail --silent --show-error "$origin/api/v1/config")" && break
+            test "$attempt" -eq 12 && exit 1
+            sleep 5
+          done
+          grep -Fq 'app.js?v=20260921-turnstile' <<<"$html"
+          grep -Fq 'E-mail ou telefone' <<<"$app"
+          CONFIG="$config" node - <<'NODE'
+          const config = JSON.parse(process.env.CONFIG);
+          if (config.turnstileSiteKey !== process.env.PREVIEW_TURNSTILE_SITE_KEY) {
+            throw new Error('Published Turnstile Site Key does not match the preview variable');
+          }
+          NODE
