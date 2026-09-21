@@ -4,9 +4,6 @@
 /login
   Cache-Control: no-store
 
-/cadastro
-  Cache-Control: no-store
-
 /esqueci-senha
   Cache-Control: no-store
 
