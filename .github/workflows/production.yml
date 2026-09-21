@@ -2,6 +2,9 @@ name: Production Cloudflare
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -18,7 +21,6 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +41,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PASSWORD_PEPPER; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
             test -n "${!name}" || { echo "Missing production secret/variable: $name"; exit 1; }
           done
           node - <<'NODE'
@@ -52,10 +54,11 @@ jobs:
           NODE
           npx wrangler whoami
 
-      - name: Resolve the exclusive production D1 database
+      - name: Verify the exclusive production D1 database
         shell: bash
         run: |
           set -euo pipefail
+          npm run predb:migrate:production
           databases="$(npx wrangler d1 list --json)"
           database_uuid="$(DATABASES="$databases" node - <<'NODE'
           const databases = JSON.parse(process.env.DATABASES);
@@ -64,28 +67,10 @@ jobs:
           process.stdout.write(production[0]?.uuid ?? '');
           NODE
           )"
-          if [ -z "$database_uuid" ]; then
-            npx wrangler d1 create membros-producao
-            databases="$(npx wrangler d1 list --json)"
-            database_uuid="$(DATABASES="$databases" node -e \
-              "const values=JSON.parse(process.env.DATABASES); const value=values.find(({name})=>name==='membros-producao'); process.stdout.write(value?.uuid ?? '')")"
-          fi
-          [[ "$database_uuid" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo 'Cloudflare did not return a valid production D1 UUID.'; exit 1; }
-          echo "PRODUCTION_DATABASE_UUID=$database_uuid" >> "$GITHUB_ENV"
-
-      - name: Materialize verified public bindings
-        shell: bash
-        run: |
-          node - <<'NODE'
-          import fs from 'node:fs';
-          const path = 'wrangler.jsonc';
-          let config = fs.readFileSync(path, 'utf8');
-          for (const [token, value] of [
-            ['PRODUCTION_DATABASE_NAME', 'membros-producao'],
-            ['PRODUCTION_DATABASE_UUID', process.env.PRODUCTION_DATABASE_UUID],
-          ]) config = config.replace(token, value);
-          fs.writeFileSync(path, config);
-          NODE
+          test "$database_uuid" = '21fcb86e-cf42-473e-bced-91b5f8228cfd' || {
+            echo 'membros-producao does not resolve to the approved production UUID.'
+            exit 1
+          }
 
       - name: Check and test
         run: |
@@ -93,16 +78,15 @@ jobs:
           npm test
           npx wrangler deploy --env="" --dry-run --outdir .wrangler/production-dry-run
 
-      - name: Configure managed production secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s' "$PASSWORD_PEPPER" | npx wrangler secret put PASSWORD_PEPPER --env=""
-
       - name: Apply production migrations
         run: npm run db:migrate:production
 
+      - name: Validate production D1 schema
+        run: npm run db:validate:production
+
       - name: Deploy production Worker and custom domain
+        # deploy repeats the idempotent migration/validation guard so Cloudflare
+        # Builds and GitHub Actions use the same fail-before-deploy behavior.
         run: npm run deploy
 
       - name: Smoke test production

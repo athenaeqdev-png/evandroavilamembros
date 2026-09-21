@@ -18,8 +18,10 @@ Na configuração de **Builds** do Worker de produção, use:
 Não use `npx wrangler versions upload` diretamente em nenhum desses campos. O
 script `versions:upload` prepara `dist/` antes do upload e existe para os Builds
 em que o Cloudflare executa o Version command. O Deploy command usa o lifecycle
-do npm: `npm run deploy` executa automaticamente `predeploy`, que também recria
-`dist/`, antes de executar `wrangler deploy`.
+do npm: `npm run deploy` executa automaticamente `predeploy`, que recria `dist/`,
+depois aplica e valida as migrations de produção e somente então executa
+`wrangler deploy`. Qualquer falha de migration ou tabela ausente interrompe o
+comando antes da publicação.
 
 O comando de instalação pode ficar vazio para o Cloudflare usar a instalação
 automática de dependências. Caso o painel ofereça um campo explícito e ele seja
@@ -64,5 +66,11 @@ O pipeline oficial segue esta ordem:
 4. `npm run check`;
 5. `npm test`;
 6. `npm run db:migrate:production`;
-7. `npm run deploy`;
-8. smoke test em `https://membros.evandroavila.com.br`.
+7. `npm run db:validate:production`;
+8. `npm run deploy` (repete de forma idempotente as etapas 6 e 7);
+9. smoke test em `https://membros.evandroavila.com.br`.
+
+O workflow `.github/workflows/production.yml` também inicia automaticamente em
+todo push para `main` (inclusive merges) e pode ser iniciado manualmente. Se o
+environment `production` tiver regras de aprovação, o job aguardará essa
+aprovação antes de usar as credenciais e prosseguir.
