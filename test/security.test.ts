@@ -31,6 +31,10 @@ describe("segurança", () => {
     expect(script).not.toContain("membros-preview");
   });
   it("faz hash de senha com salt e verifica sem guardar o texto", async () => { const value=await hashPassword("uma senha bastante segura","pepper"); expect(value.hash).not.toContain("uma senha"); expect(await verifyPassword("uma senha bastante segura","pepper",value.hash,value.parameters)).toBe(true); expect(await verifyPassword("errada","pepper",value.hash,value.parameters)).toBe(false); });
+  it("trata credenciais malformadas como inválidas sem derrubar o login", async () => {
+    await expect(verifyPassword("senha", "pepper", "hash", "não é JSON")).resolves.toBe(false);
+    await expect(verifyPassword("senha", "pepper", "hash", JSON.stringify({ iterations: PASSWORD_ITERATIONS, salt: "%%%" }))).resolves.toBe(false);
+  });
   it("respeita o limite de iterações PBKDF2 do Cloudflare Workers", async () => {
     expect(PASSWORD_ITERATIONS).toBe(100_000);
     expect(PASSWORD_ITERATIONS).toBeLessThanOrEqual(100_000);
@@ -92,6 +96,23 @@ describe("segurança", () => {
     const response = await worker.fetch(new Request("https://membros.evandroavila.com.br/login", { headers:{ cookie:"__Host-session=sessao-valida" } }), env);
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://membros.evandroavila.com.br/inicio");
+  });
+  it("obriga a troca da senha provisória antes de liberar a área", async () => {
+    const user = { id:"user-1", email:"membro@example.com", phone:null, display_name:"Membro", password_hash:"", password_parameters:"", role:"member", status:"active", must_change_password:1 };
+    const env = { APP_ENV:"production", DB: { prepare: () => ({ bind: () => ({ first: async () => user }) }) } } as never;
+    for (const path of ["/login", "/inicio", "/inicio/"]) {
+      const response = await worker.fetch(new Request(`https://membros.evandroavila.com.br${path}`, { headers:{ cookie:"__Host-session=sessao-valida" } }), env);
+      expect(response.status, path).toBe(302);
+      expect(response.headers.get("location"), path).toBe("https://membros.evandroavila.com.br/perfil");
+    }
+  });
+  it("protege também as variantes com barra final", async () => {
+    const env = { DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } } as never;
+    for (const path of ["/inicio/", "/perfil/"]) {
+      const response = await worker.fetch(new Request(`https://membros.evandroavila.com.br${path}`), env);
+      expect(response.status, path).toBe(302);
+      expect(response.headers.get("location"), path).toBe("https://membros.evandroavila.com.br/login");
+    }
   });
   it("não disponibiliza endpoint público de registro", async () => {
     const request = new Request("https://membros.evandroavila.com.br/api/v1/auth/register", {
