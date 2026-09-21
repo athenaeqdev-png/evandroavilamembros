@@ -29,12 +29,18 @@ function assetCacheHeaders(response: Response, pathname: string): Response {
 }
 async function body(request: Request): Promise<Record<string, unknown> | null> { try { return await request.json() as Record<string, unknown>; } catch { return null; } }
 function sameOrigin(request: Request, env: Env) { const origin = request.headers.get("origin"), fetchSite=request.headers.get("sec-fetch-site"); return origin ? origin === env.APP_ORIGIN : fetchSite === "same-origin"; }
-async function turnstile(token: unknown, request: Request, env: Env) {
+async function turnstile(token: unknown, action: "login" | "forgot", request: Request, env: Env) {
   if (env.APP_ENV === "development" && token === "dev-bypass") return true;
   if (typeof token !== "string" || !token || !env.TURNSTILE_SECRET_KEY) return false;
   const form = new FormData(); form.set("secret", env.TURNSTILE_SECRET_KEY); form.set("response", token); form.set("remoteip", request.headers.get("CF-Connecting-IP") || "");
-  const result = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form }).then(r => r.json()) as { success: boolean };
-  return result.success;
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form });
+    if (!response.ok) return false;
+    const result = await response.json() as { success?: boolean; hostname?: string; action?: string };
+    return result.success === true && result.hostname === new URL(env.APP_ORIGIN).hostname && result.action === action;
+  } catch {
+    return false;
+  }
 }
 async function currentUser(request: Request, env: Env): Promise<{ user: User; sessionId: string } | null> {
   const token = cookie(request, "__Host-session") || (env.APP_ENV === "development" ? cookie(request, "session") : undefined); if (!token) return null;
@@ -59,7 +65,7 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
   }
   if (path === "/api/v1/auth/login" && request.method === "POST") {
     const identifier = typeof data?.identifier === "string" ? data.identifier : data?.email, { email, phone } = normalizeLoginIdentifier(identifier), password = data?.password;
-    if (!await turnstile(data?.turnstileToken, request, env)) return json({ error: "Verificação de segurança inválida." }, 400);
+    if (!await turnstile(data?.turnstileToken, "login", request, env)) return json({ error: "Verificação de segurança inválida." }, 400);
     const user = await env.DB.prepare("SELECT * FROM users WHERE (email=? OR phone=?) AND deleted_at IS NULL").bind(email,phone).first<User>();
     if (!user || user.status !== "active" || typeof password !== "string" || !await verifyPassword(password, env.PASSWORD_PEPPER, user.password_hash, user.password_parameters)) return json({ error: "E-mail/telefone ou senha inválidos." }, 401);
     const now = new Date().toISOString(); await env.DB.prepare("UPDATE users SET last_login_at=?,updated_at=? WHERE id=?").bind(now,now,user.id).run();
@@ -68,7 +74,7 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
   if (path === "/api/v1/auth/session" && request.method === "GET") { const auth = await currentUser(request,env); return auth ? json({ user:{ id:auth.user.id,email:auth.user.email,displayName:auth.user.display_name,role:auth.user.role,status:auth.user.status,mustChangePassword:!!auth.user.must_change_password }}) : json({ error:"Não autenticado."},401); }
   if (path === "/api/v1/auth/logout" && request.method === "POST") { const auth=await currentUser(request,env); if(auth&&!await validCsrf(request,env,auth.sessionId)) return json({error:"Token CSRF inválido."},403); if(auth) await env.DB.prepare("UPDATE sessions SET revoked_at=? WHERE id=?").bind(new Date().toISOString(),auth.sessionId).run(); const headers=new Headers(); headers.append("set-cookie",`${env.APP_ENV === "production" ? "__Host-session":"session"}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${env.APP_ENV === "production" ? "; Secure":""}`); headers.append("set-cookie",`csrf=; Path=/; SameSite=Lax; Max-Age=0${env.APP_ENV === "production" ? "; Secure":""}`); return json({ok:true},200,headers); }
   if (path === "/api/v1/auth/change-password" && request.method === "POST") { const auth=await currentUser(request,env); if(!auth) return json({error:"Não autenticado."},401); if(!await validCsrf(request,env,auth.sessionId)) return json({error:"Token CSRF inválido."},403); const current=data?.currentPassword,newPassword=data?.newPassword; if(typeof current!=="string"||!await verifyPassword(current,env.PASSWORD_PEPPER,auth.user.password_hash,auth.user.password_parameters)) return json({error:"Senha atual inválida."},401); if(typeof newPassword!=="string"||newPassword.length<12||newPassword.length>128) return json({error:"A nova senha deve ter entre 12 e 128 caracteres."},422); const value=await hashPassword(newPassword,env.PASSWORD_PEPPER),now=new Date().toISOString(); await env.DB.prepare("UPDATE users SET password_hash=?,password_parameters=?,must_change_password=0,updated_at=? WHERE id=?").bind(value.hash,value.parameters,now,auth.user.id).run(); await env.DB.prepare("UPDATE sessions SET revoked_at=? WHERE user_id=? AND id<>?").bind(now,auth.user.id,auth.sessionId).run(); return json({ok:true}); }
-  if (path === "/api/v1/auth/forgot-password" && request.method === "POST") { const email=normalizeEmail(data?.email); if(await turnstile(data?.turnstileToken,request,env) && validEmail(email)){ const user=await env.DB.prepare("SELECT id FROM users WHERE email=? AND status='active'").bind(email).first<{id:string}>(); if(user){ const token=randomToken(),now=new Date(); await env.DB.prepare("INSERT INTO password_resets(id,user_id,token_hash,created_at,expires_at) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),user.id,await sha256(token),now.toISOString(),new Date(now.getTime()+Number(env.PASSWORD_RESET_TTL_SECONDS||3600)*1000).toISOString()).run(); } } return json({message:"Se o e-mail estiver cadastrado, você receberá as instruções."}); }
+  if (path === "/api/v1/auth/forgot-password" && request.method === "POST") { const email=normalizeEmail(data?.email); if(await turnstile(data?.turnstileToken,"forgot",request,env) && validEmail(email)){ const user=await env.DB.prepare("SELECT id FROM users WHERE email=? AND status='active'").bind(email).first<{id:string}>(); if(user){ const token=randomToken(),now=new Date(); await env.DB.prepare("INSERT INTO password_resets(id,user_id,token_hash,created_at,expires_at) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),user.id,await sha256(token),now.toISOString(),new Date(now.getTime()+Number(env.PASSWORD_RESET_TTL_SECONDS||3600)*1000).toISOString()).run(); } } return json({message:"Se o e-mail estiver cadastrado, você receberá as instruções."}); }
   return json({ error: "Rota não encontrada." }, 404);
 }
 

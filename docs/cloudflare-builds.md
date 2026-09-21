@@ -36,16 +36,25 @@ O binding `DB` do ambiente principal aponta exclusivamente para o D1
 ambiente `preview`.
 
 As chaves reais do Turnstile não são versionadas. Antes da publicação, crie no
-painel do Cloudflare um widget que autorize `membros.evandroavila.com.br` e
-configure os valores reais no Worker principal (sem `--env preview`):
+painel do Cloudflare um widget **Managed** chamado `membros-producao` e adicione o
+hostname `membros.evandroavila.com.br` (sem `https://` e sem caminho). Na página
+do widget, copie a **Site Key** pública para a variável de ambiente do GitHub
+`PRODUCTION_TURNSTILE_SITE_KEY`, em **Settings → Environments → production →
+Environment variables**. Copie a **Secret Key** para o secret
+`TURNSTILE_SECRET_KEY`, na seção **Environment secrets** do mesmo ambiente.
+
+O workflow substitui `PRODUCTION_TURNSTILE_SITE_KEY` no `wrangler.jsonc`, instala
+a secret key no Worker e só então publica. Para uma publicação manual equivalente,
+materialize a Site Key no arquivo de trabalho (sem commitá-la) e instale apenas a
+Secret Key no Worker principal (sem `--env preview`):
 
 ```sh
-npx wrangler secret put TURNSTILE_SITE_KEY --env=""
 npx wrangler secret put TURNSTILE_SECRET_KEY --env=""
 ```
 
-Não use valores de exemplo: sem as duas chaves reais, os endpoints de cadastro
-e recuperação de senha permanecem indisponíveis por segurança.
+Não use valores de exemplo e nunca versione a Secret Key. O widget de preview é
+outro recurso, autoriza somente `membros-preview.evandroavila.com.br` e continua
+usando `PREVIEW_TURNSTILE_SITE_KEY` e secrets do ambiente `preview`.
 
 ## Ordem esperada
 
