@@ -19,14 +19,21 @@ export async function hashPassword(password: string, pepper: string, salt = cryp
 }
 
 export async function verifyPassword(password: string, pepper: string, expected: string, parameters: string): Promise<boolean> {
-  const parsed = JSON.parse(parameters) as { iterations: number; salt: string };
-  if (parsed.iterations !== PASSWORD_ITERATIONS) return false;
-  const salt = Uint8Array.from(atob(parsed.salt), (char) => char.charCodeAt(0));
-  const actual = (await hashPassword(password, pepper, salt)).hash;
-  if (actual.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < actual.length; index++) difference |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
-  return difference === 0;
+  try {
+    const parsed = JSON.parse(parameters) as { iterations?: unknown; salt?: unknown };
+    if (parsed.iterations !== PASSWORD_ITERATIONS || typeof parsed.salt !== "string" || !parsed.salt) return false;
+    const salt = Uint8Array.from(atob(parsed.salt), (char) => char.charCodeAt(0));
+    if (salt.length !== 16) return false;
+    const actual = (await hashPassword(password, pepper, salt)).hash;
+    if (actual.length !== expected.length) return false;
+    let difference = 0;
+    for (let index = 0; index < actual.length; index++) difference |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
+    return difference === 0;
+  } catch {
+    // A legacy or damaged credential must behave like an invalid password, not
+    // turn a login attempt into an unhandled Worker exception.
+    return false;
+  }
 }
 
 export function randomToken(): string {
