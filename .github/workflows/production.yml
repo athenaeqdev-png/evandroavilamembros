@@ -1,0 +1,85 @@
+name: Production Cloudflare
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+      PRODUCTION_DATABASE_UUID: ${{ vars.PRODUCTION_DATABASE_UUID }}
+      PRODUCTION_TURNSTILE_SITE_KEY: ${{ vars.PRODUCTION_TURNSTILE_SITE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Validate production configuration against Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PRODUCTION_DATABASE_NAME PRODUCTION_DATABASE_UUID PRODUCTION_TURNSTILE_SITE_KEY; do
+            test -n "${!name}" || { echo "Missing production secret/variable: $name"; exit 1; }
+          done
+          case "$PRODUCTION_DATABASE_NAME" in
+            membros-local|membros-preview) echo 'Production cannot use a local or preview database.'; exit 1 ;;
+          esac
+          [[ "$PRODUCTION_DATABASE_UUID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo 'Invalid production D1 UUID.'; exit 1; }
+          [[ "$PRODUCTION_TURNSTILE_SITE_KEY" == 0x* ]] || { echo 'Invalid production Turnstile Site Key.'; exit 1; }
+          npx wrangler whoami
+          databases="$(npx wrangler d1 list --json)"
+          DATABASES="$databases" node - <<'NODE'
+          const databases = JSON.parse(process.env.DATABASES);
+          const match = databases.find(({ name, uuid }) =>
+            name === process.env.PRODUCTION_DATABASE_NAME && uuid === process.env.PRODUCTION_DATABASE_UUID);
+          if (!match) throw new Error('Configured production D1 name/UUID does not match the Cloudflare account');
+          NODE
+
+      - name: Materialize verified public bindings
+        shell: bash
+        run: |
+          node - <<'NODE'
+          import fs from 'node:fs';
+          const path = 'wrangler.jsonc';
+          let config = fs.readFileSync(path, 'utf8');
+          for (const [token, value] of [
+            ['PRODUCTION_DATABASE_NAME', process.env.PRODUCTION_DATABASE_NAME],
+            ['PRODUCTION_DATABASE_UUID', process.env.PRODUCTION_DATABASE_UUID],
+            ['PRODUCTION_TURNSTILE_SITE_KEY', process.env.PRODUCTION_TURNSTILE_SITE_KEY],
+          ]) config = config.replace(token, value);
+          fs.writeFileSync(path, config);
+          NODE
+
+      - name: Check and test
+        run: |
+          npm run check
+          npm test
+          npm run assets:prepare
+          npx wrangler deploy --dry-run --outdir .wrangler/production-dry-run
+
+      - name: Deploy production Worker and custom domain
+        run: npm run deploy
+
+      - name: Smoke test production
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://membros.evandroavila.com.br'
+          curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$origin/login" >/dev/null
+          curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$origin/api/v1/config" >/dev/null
