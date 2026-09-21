@@ -16,6 +16,14 @@ describe("segurança", () => {
     expect(app).toContain("data.turnstileToken=turnstileToken");
     expect(app).not.toContain('||"dev-bypass"');
   });
+  it("limita o link do WhatsApp ao hotspot responsivo da arte", () => {
+    const app = readFileSync(new URL("../public/js/app.js", import.meta.url), "utf8");
+    expect(app).toContain('href="https://chat.whatsapp.com/DHg1iTbNSZb20AJXDpxsbh"');
+    expect(app).toContain('rel="noopener noreferrer"');
+    expect(app).toContain('aria-label="Entrar no grupo gratuito da Jornada Metabólica no WhatsApp"');
+    expect(app).toContain("const communityHotspot={left:640/1254,top:899/1254,width:532/1254,height:96/1254}");
+    expect(app).not.toContain('<a class="visual-panel"');
+  });
   it("não publica interface de cadastro", () => {
     const app = readFileSync(new URL("../public/js/app.js", import.meta.url), "utf8");
     expect(app).not.toContain("Cadastre-se");
@@ -26,6 +34,19 @@ describe("segurança", () => {
     const response = await worker.fetch(new Request("https://membros.evandroavila.com.br/cadastro"), {} as never);
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://membros.evandroavila.com.br/login");
+  });
+  it("protege a sala de aula /inicio contra acesso sem sessão", async () => {
+    const env = { DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } } as never;
+    const response = await worker.fetch(new Request("https://membros.evandroavila.com.br/inicio"), env);
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://membros.evandroavila.com.br/login");
+  });
+  it("mantém a sessão válida e evita apresentar o login novamente", async () => {
+    const user = { id:"user-1", email:"membro@example.com", phone:null, display_name:"Membro", password_hash:"", password_parameters:"", role:"member", status:"active", must_change_password:0 };
+    const env = { APP_ENV:"production", DB: { prepare: () => ({ bind: () => ({ first: async () => user }) }) } } as never;
+    const response = await worker.fetch(new Request("https://membros.evandroavila.com.br/login", { headers:{ cookie:"__Host-session=sessao-valida" } }), env);
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://membros.evandroavila.com.br/inicio");
   });
   it("não disponibiliza endpoint público de registro", async () => {
     const request = new Request("https://membros.evandroavila.com.br/api/v1/auth/register", {
