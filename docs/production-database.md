@@ -27,9 +27,11 @@ o segundo falha se alguma das 18 tabelas do projeto não estiver presente.
 ## Provisionar o primeiro administrador
 
 Execute somente depois das migrations. O script recusa uma configuração cujo
-nome ou UUID de produção não seja o esperado, confirma que preview não aponta
-para o mesmo banco e só insere quando a tabela `users` está vazia. A conta é
-marcada com `must_change_password=1` para o fluxo de troca de senha.
+nome ou UUID de produção não seja o esperado e confirma que preview não aponta
+para o mesmo banco. Ele cria a conta pelo e-mail ou, caso ela já exista, renova
+com segurança a senha e os campos administrativos sem duplicá-la. Em ambos os
+casos a conta fica como `admin`, `active`, com e-mail verificado e
+`must_change_password=1` para o fluxo de troca de senha. O telefone é opcional.
 
 Para evitar que a senha seja gravada no histórico do shell, leia-a de forma
 oculta. O `PASSWORD_PEPPER` deve ser exatamente o secret já configurado no
@@ -38,8 +40,8 @@ Worker de produção.
 ```sh
 read -r -s -p "Senha inicial: " ADMIN_PASSWORD; echo
 export ADMIN_PASSWORD
-export ADMIN_EMAIL="administrador@example.com"
-export ADMIN_PHONE="11999999999"
+export ADMIN_EMAIL="nutrievandroavila@gmail.com"
+# Opcional: export ADMIN_PHONE="11999999999"
 export ADMIN_NAME="Administrador"
 export PASSWORD_PEPPER # defina por um gerenciador de segredos ou prompt seguro
 npm run admin:create:production
@@ -48,5 +50,24 @@ unset ADMIN_PASSWORD PASSWORD_PEPPER
 
 O script não aceita nome de banco por parâmetro, não imprime segredos, remove
 as variáveis sensíveis do ambiente do subprocesso Wrangler e apaga o arquivo
-SQL temporário mesmo em caso de falha. Se já houver qualquer usuário, nenhuma
-nova conta é inserida; ele não altera usuários existentes.
+SQL temporário mesmo em caso de falha. O conflito é resolvido somente pelo
+e-mail: outros usuários não são alterados.
+
+Confirme sem revelar valores quais secrets existem no Worker:
+
+```sh
+npx wrangler secret list --env=""
+```
+
+Se `PASSWORD_PEPPER` não estiver na lista, gere e guarde o valor no gerenciador
+de segredos adotado pela equipe e grave exatamente esse valor no Worker (não o
+registre no Git nem no histórico do shell):
+
+```sh
+npx wrangler secret put PASSWORD_PEPPER --env=""
+```
+
+O valor usado localmente no provisionamento precisa ser idêntico ao secret do
+Worker. O Cloudflare não permite recuperar o valor de um secret existente; se
+ele não estiver disponível no gerenciador seguro, faça uma rotação controlada
+do secret e reprovisione as senhas afetadas.

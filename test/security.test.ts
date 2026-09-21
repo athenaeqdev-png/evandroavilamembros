@@ -19,7 +19,11 @@ describe("segurança", () => {
     expect(script).toContain('const productionDatabase = "membros-producao"');
     expect(script).toContain('const productionDatabaseId = "21fcb86e-cf42-473e-bced-91b5f8228cfd"');
     expect(script).toContain('"--remote"');
-    expect(script).toContain("WHERE NOT EXISTS (SELECT 1 FROM users)");
+    expect(script).toContain("ON CONFLICT(email) DO UPDATE SET");
+    expect(script).toContain("role='admin'");
+    expect(script).toContain("status='active'");
+    expect(script).toContain("deleted_at=NULL");
+    expect(script).toContain('const phoneInput = process.env.ADMIN_PHONE?.trim() || ""');
     expect(script).toContain("delete childEnvironment.ADMIN_PASSWORD");
     expect(script).toContain("delete childEnvironment.PASSWORD_PEPPER");
     expect(script).not.toContain("membros-preview");
