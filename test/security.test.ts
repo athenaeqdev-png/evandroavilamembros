@@ -9,6 +9,19 @@ describe("segurança", () => {
     expect(config.vars.TURNSTILE_SITE_KEY).toBe("0x4AAAAAAE_Epyppm4T7SENx");
     expect(config.vars).not.toHaveProperty("TURNSTILE_SECRET_KEY");
     expect(config.env.preview.vars.TURNSTILE_SITE_KEY).toBe("PREVIEW_TURNSTILE_SITE_KEY");
+    expect(config.d1_databases).toContainEqual({ binding: "DB", database_name: "membros-producao", database_id: "21fcb86e-cf42-473e-bced-91b5f8228cfd" });
+    expect(config.env.preview.d1_databases[0].database_name).not.toBe("membros-producao");
+    expect(config.env.preview.d1_databases[0].database_id).not.toBe("21fcb86e-cf42-473e-bced-91b5f8228cfd");
+  });
+  it("mantém o provisionamento inicial restrito ao D1 remoto de produção", () => {
+    const script = readFileSync(new URL("../scripts/create-production-admin.mjs", import.meta.url), "utf8");
+    expect(script).toContain('const productionDatabase = "membros-producao"');
+    expect(script).toContain('const productionDatabaseId = "21fcb86e-cf42-473e-bced-91b5f8228cfd"');
+    expect(script).toContain('"--remote"');
+    expect(script).toContain("WHERE NOT EXISTS (SELECT 1 FROM users)");
+    expect(script).toContain("delete childEnvironment.ADMIN_PASSWORD");
+    expect(script).toContain("delete childEnvironment.PASSWORD_PEPPER");
+    expect(script).not.toContain("membros-preview");
   });
   it("faz hash de senha com salt e verifica sem guardar o texto", async () => { const value=await hashPassword("uma senha bastante segura","pepper"); expect(value.hash).not.toContain("uma senha"); expect(await verifyPassword("uma senha bastante segura","pepper",value.hash,value.parameters)).toBe(true); expect(await verifyPassword("errada","pepper",value.hash,value.parameters)).toBe(false); });
   it("gera tokens opacos com pelo menos 256 bits", () => expect(randomToken().length).toBeGreaterThanOrEqual(43));
