@@ -28,6 +28,25 @@ necessário, use `npm ci`.
 Esses valores são exclusivos do Worker de produção. Não selecione o ambiente
 `preview` e não acrescente `--env preview` aos comandos acima.
 
+## Banco e segredos de produção
+
+O binding `DB` do ambiente principal aponta exclusivamente para o D1
+`membros-producao`. Para aplicar as migrations versionadas nesse banco, use
+`npm run db:migrate:production`. Esse comando não seleciona nem modifica o
+ambiente `preview`.
+
+As chaves reais do Turnstile não são versionadas. Antes da publicação, crie no
+painel do Cloudflare um widget que autorize `membros.evandroavila.com.br` e
+configure os valores reais no Worker principal (sem `--env preview`):
+
+```sh
+npx wrangler secret put TURNSTILE_SITE_KEY --env=""
+npx wrangler secret put TURNSTILE_SECRET_KEY --env=""
+```
+
+Não use valores de exemplo: sem as duas chaves reais, os endpoints de cadastro
+e recuperação de senha permanecem indisponíveis por segurança.
+
 ## Ordem esperada
 
 O pipeline oficial segue esta ordem:
@@ -37,5 +56,6 @@ O pipeline oficial segue esta ordem:
 3. validação da existência de `dist/`;
 4. `npm run check`;
 5. `npm test`;
-6. `npm run deploy`;
-7. smoke test em `https://membros.evandroavila.com.br`.
+6. `npm run db:migrate:production`;
+7. `npm run deploy`;
+8. smoke test em `https://membros.evandroavila.com.br`.
