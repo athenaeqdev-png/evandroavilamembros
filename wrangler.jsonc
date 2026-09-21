@@ -9,6 +9,7 @@
     { "pattern": "membros.evandroavila.com.br", "custom_domain": true }
   ],
   "d1_databases": [{ "binding": "DB", "database_name": "membros-producao", "database_id": "21fcb86e-cf42-473e-bced-91b5f8228cfd" }],
+  "send_email": [{ "name": "EMAIL" }],
   "vars": {
     "APP_ENV": "production",
     "APP_ORIGIN": "https://membros.evandroavila.com.br",
@@ -23,6 +24,7 @@
         { "pattern": "membros-preview.evandroavila.com.br", "custom_domain": true }
       ],
       "d1_databases": [{ "binding": "DB", "database_name": "membros-preview", "database_id": "PREVIEW_D1_DATABASE_ID" }],
+      "send_email": [{ "name": "EMAIL" }],
       "vars": {
         "APP_ENV": "production",
         "APP_ORIGIN": "https://membros-preview.evandroavila.com.br",

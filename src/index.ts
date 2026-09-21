@@ -1,7 +1,7 @@
 import { hashPassword, randomToken, sha256, verifyPassword } from "./security";
 
-interface Env { DB: D1Database; ASSETS: Fetcher; APP_ENV: string; APP_ORIGIN: string; SESSION_TTL_SECONDS: string; PASSWORD_RESET_TTL_SECONDS: string; TURNSTILE_SITE_KEY: string; TURNSTILE_SECRET_KEY: string; PASSWORD_PEPPER: string }
-interface User { id: string; email: string; phone: string | null; display_name: string; password_hash: string; password_parameters: string; role: string; status: string; must_change_password: number }
+interface Env { DB: D1Database; ASSETS: Fetcher; EMAIL?: SendEmail; EMAIL_FROM?: string; APP_ENV: string; APP_ORIGIN: string; SESSION_TTL_SECONDS: string; PASSWORD_RESET_TTL_SECONDS: string; TURNSTILE_SITE_KEY: string; TURNSTILE_SECRET_KEY: string; PASSWORD_PEPPER: string }
+interface User { id: string; email: string; phone: string | null; display_name: string; password_hash: string; password_algorithm: string; password_parameters: string; role: string; status: string; must_change_password: number }
 const json = (body: unknown, status = 200, extra: HeadersInit = {}) => { const headers=new Headers(extra); headers.set("content-type","application/json; charset=utf-8"); headers.set("cache-control","no-store"); return new Response(JSON.stringify(body),{status,headers}); };
 const normalizeEmail = (value: unknown) => typeof value === "string" ? value.trim().toLowerCase() : "";
 const validEmail = (email: string) => email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -15,6 +15,9 @@ export const normalizePhone = (value: unknown) => {
 };
 export const normalizeLoginIdentifier = (value: unknown) => ({ email: normalizeEmail(value), phone: normalizePhone(value) });
 const cookie = (request: Request, name: string) => request.headers.get("cookie")?.split(";").map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.slice(name.length + 1);
+const validPassword = (value: unknown): value is string => typeof value === "string" && value.length >= 12 && value.length <= 128;
+export const generateTemporaryPassword = () => randomToken();
+const verifyUserPassword = (password: string, pepper: string, user: User) => user.password_algorithm === "pbkdf2-sha256" && verifyPassword(password, pepper, user.password_hash, user.password_parameters);
 
 function secureHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
@@ -56,6 +59,11 @@ async function createSession(userId: string, request: Request, env: Env) {
 }
 const sessionHeaders = async (userId: string, request: Request, env: Env) => { const headers = new Headers(); for (const value of await createSession(userId, request, env)) headers.append("set-cookie", value); return headers; };
 async function validCsrf(request: Request, env: Env, sessionId: string) { const supplied=request.headers.get("x-csrf-token"), csrfCookie=cookie(request,"csrf"); if(!supplied||supplied!==csrfCookie) return false; const row=await env.DB.prepare("SELECT csrf_secret_hash FROM sessions WHERE id=?").bind(sessionId).first<{csrf_secret_hash:string}>(); return !!row && row.csrf_secret_hash===await sha256(supplied); }
+async function sendTemporaryPassword(env: Env, user: { email: string; name: string }, password: string) {
+  if (!env.EMAIL || !validEmail(env.EMAIL_FROM || "")) throw new Error("Serviço de e-mail indisponível.");
+  const text = `Olá, ${user.name}.\n\nSeu acesso à Jornada Metabólica foi criado.\n\nE-mail: ${user.email}\nSenha temporária: ${password}\n\nAcesse:\nhttps://membros.evandroavila.com.br/login\n\nNo primeiro acesso você deverá criar sua senha definitiva.`;
+  await env.EMAIL.send({ from: env.EMAIL_FROM!, to: user.email, subject: "Seu acesso à Jornada Metabólica", text });
+}
 async function api(request: Request, env: Env, path: string): Promise<Response> {
   if (!sameOrigin(request, env) && request.method !== "GET") return json({ error: "Origem inválida." }, 403);
   const data = request.method === "GET" ? null : await body(request);
@@ -68,13 +76,40 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
     const identifier = typeof data?.identifier === "string" ? data.identifier : data?.email, { email, phone } = normalizeLoginIdentifier(identifier), password = data?.password;
     if (!await turnstile(data?.turnstileToken, "login", request, env)) return json({ error: "Verificação de segurança inválida." }, 400);
     const user = await env.DB.prepare("SELECT * FROM users WHERE (email=? OR phone=?) AND deleted_at IS NULL").bind(email,phone).first<User>();
-    if (!user || user.status !== "active" || typeof password !== "string" || !await verifyPassword(password, env.PASSWORD_PEPPER, user.password_hash, user.password_parameters)) return json({ error: "E-mail/telefone ou senha inválidos." }, 401);
+    if (!user || user.status !== "active" || typeof password !== "string" || !await verifyUserPassword(password, env.PASSWORD_PEPPER, user)) return json({ error: "E-mail/telefone ou senha inválidos." }, 401);
     const now = new Date().toISOString(); await env.DB.prepare("UPDATE users SET last_login_at=?,updated_at=? WHERE id=?").bind(now,now,user.id).run();
     return json({ user: { id:user.id,email:user.email,displayName:user.display_name,role:user.role,mustChangePassword:!!user.must_change_password } }, 200, await sessionHeaders(user.id,request,env));
   }
   if (path === "/api/v1/auth/session" && request.method === "GET") { const auth = await currentUser(request,env); return auth ? json({ user:{ id:auth.user.id,email:auth.user.email,displayName:auth.user.display_name,role:auth.user.role,status:auth.user.status,mustChangePassword:!!auth.user.must_change_password }}) : json({ error:"Não autenticado."},401); }
   if (path === "/api/v1/auth/logout" && request.method === "POST") { const auth=await currentUser(request,env); if(auth&&!await validCsrf(request,env,auth.sessionId)) return json({error:"Token CSRF inválido."},403); if(auth) await env.DB.prepare("UPDATE sessions SET revoked_at=? WHERE id=?").bind(new Date().toISOString(),auth.sessionId).run(); const headers=new Headers(); headers.append("set-cookie",`${env.APP_ENV === "production" ? "__Host-session":"session"}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${env.APP_ENV === "production" ? "; Secure":""}`); headers.append("set-cookie",`csrf=; Path=/; SameSite=Lax; Max-Age=0${env.APP_ENV === "production" ? "; Secure":""}`); return json({ok:true},200,headers); }
-  if (path === "/api/v1/auth/change-password" && request.method === "POST") { const auth=await currentUser(request,env); if(!auth) return json({error:"Não autenticado."},401); if(!await validCsrf(request,env,auth.sessionId)) return json({error:"Token CSRF inválido."},403); const current=data?.currentPassword,newPassword=data?.newPassword; if(typeof current!=="string"||!await verifyPassword(current,env.PASSWORD_PEPPER,auth.user.password_hash,auth.user.password_parameters)) return json({error:"Senha atual inválida."},401); if(typeof newPassword!=="string"||newPassword.length<12||newPassword.length>128) return json({error:"A nova senha deve ter entre 12 e 128 caracteres."},422); const value=await hashPassword(newPassword,env.PASSWORD_PEPPER),now=new Date().toISOString(); await env.DB.prepare("UPDATE users SET password_hash=?,password_parameters=?,must_change_password=0,updated_at=? WHERE id=?").bind(value.hash,value.parameters,now,auth.user.id).run(); await env.DB.prepare("UPDATE sessions SET revoked_at=? WHERE user_id=? AND id<>?").bind(now,auth.user.id,auth.sessionId).run(); return json({ok:true}); }
+  if (path === "/api/v1/auth/change-password" && request.method === "POST") {
+    const auth=await currentUser(request,env); if(!auth) return json({error:"Não autenticado."},401);
+    if(!await validCsrf(request,env,auth.sessionId)) return json({error:"Token CSRF inválido."},403);
+    const current=data?.currentPassword,newPassword=data?.newPassword,confirmation=data?.confirmPassword;
+    if(!validPassword(newPassword)) return json({error:"A nova senha deve ter entre 12 e 128 caracteres."},422);
+    if(newPassword!==confirmation) return json({error:"A confirmação da nova senha não confere."},422);
+    if(!auth.user.must_change_password && (typeof current!=="string"||!await verifyUserPassword(current,env.PASSWORD_PEPPER,auth.user))) return json({error:"Senha atual inválida."},401);
+    const value=await hashPassword(newPassword,env.PASSWORD_PEPPER),now=new Date().toISOString();
+    const updated=await env.DB.prepare("UPDATE users SET password_hash=?,password_algorithm='pbkdf2-sha256',password_parameters=?,must_change_password=0,updated_at=? WHERE id=? AND password_hash=?").bind(value.hash,value.parameters,now,auth.user.id,auth.user.password_hash).run();
+    if(!updated.meta.changes) return json({error:"A senha foi alterada em outra sessão. Entre novamente."},409);
+    await env.DB.prepare("UPDATE sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL").bind(now,auth.user.id).run();
+    return json({ok:true},200,await sessionHeaders(auth.user.id,request,env));
+  }
+  if (path === "/api/v1/admin/users" && request.method === "POST") {
+    const auth=await currentUser(request,env); if(!auth) return json({error:"Não autenticado."},401);
+    if(auth.user.role!=="admin") return json({error:"Acesso negado."},403);
+    if(!await validCsrf(request,env,auth.sessionId)) return json({error:"Token CSRF inválido."},403);
+    const email=normalizeEmail(data?.email),name=typeof data?.name==="string"?data.name.trim():"",phone=normalizePhone(data?.phone),role=data?.role==="admin"?"admin":"member";
+    if(!validEmail(email)||!name||name.length>120) return json({error:"Nome e e-mail válidos são obrigatórios."},422);
+    if(data?.phone && !phone) return json({error:"Telefone inválido."},422);
+    if(!env.EMAIL||!validEmail(env.EMAIL_FROM||"")) return json({error:"Serviço de e-mail não configurado."},503);
+    if(await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first()) return json({error:"Já existe um usuário com este e-mail."},409);
+    const temporaryPassword=generateTemporaryPassword(),credential=await hashPassword(temporaryPassword,env.PASSWORD_PEPPER),id=crypto.randomUUID(),now=new Date().toISOString();
+    await env.DB.prepare("INSERT INTO users(id,email,phone,password_hash,password_algorithm,password_parameters,role,status,must_change_password,display_name,email_verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,email,phone||null,credential.hash,"pbkdf2-sha256",credential.parameters,role,"active",1,name,now,now,now).run();
+    try { await sendTemporaryPassword(env,{email,name},temporaryPassword); }
+    catch { await env.DB.prepare("DELETE FROM users WHERE id=?").bind(id).run(); return json({error:"Não foi possível enviar o acesso; o usuário não foi criado."},502); }
+    return json({user:{id,email,displayName:name,role,mustChangePassword:true}},201);
+  }
   if (path === "/api/v1/auth/forgot-password" && request.method === "POST") { const email=normalizeEmail(data?.email); if(await turnstile(data?.turnstileToken,"forgot",request,env) && validEmail(email)){ const user=await env.DB.prepare("SELECT id FROM users WHERE email=? AND status='active'").bind(email).first<{id:string}>(); if(user){ const token=randomToken(),now=new Date(); await env.DB.prepare("INSERT INTO password_resets(id,user_id,token_hash,created_at,expires_at) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),user.id,await sha256(token),now.toISOString(),new Date(now.getTime()+Number(env.PASSWORD_RESET_TTL_SECONDS||3600)*1000).toISOString()).run(); } } return json({message:"Se o e-mail estiver cadastrado, você receberá as instruções."}); }
   return json({ error: "Rota não encontrada." }, 404);
 }

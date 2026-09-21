@@ -18,13 +18,13 @@
     <main class="profile-main">
       <div class="profile-heading">
         <p class="eyebrow">Seu perfil</p>
-        <h1>Crie sua nova senha</h1>
-        <p>Por segurança, altere sua senha inicial antes de acessar sua área de membros.</p>
+        <h1 id="profile-title">Alterar senha</h1>
+        <p id="profile-description">Informe sua senha atual e escolha uma nova senha.</p>
       </div>
 
       <section class="profile-card" aria-label="Alteração de senha">
         <form id="password-form" class="profile-form">
-          <div class="profile-field">
+          <div class="profile-field" id="current-password-field">
             <label for="current-password">Senha atual</label>
             <div class="password-input">
               <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" required>
@@ -41,8 +41,16 @@
             <p id="new-password-hint" class="field-hint">Use pelo menos 12 caracteres.</p>
           </div>
 
+          <div class="profile-field">
+            <label for="confirm-password">Confirmar nova senha</label>
+            <div class="password-input">
+              <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+              <button class="password-toggle" type="button" aria-controls="confirm-password" aria-label="Exibir confirmação da nova senha">Exibir</button>
+            </div>
+          </div>
+
           <p id="status" class="form-status profile-status" role="status" aria-live="polite"></p>
-          <button class="submit-button" type="submit">Salvar nova senha</button>
+          <button class="submit-button" type="submit" disabled>Salvar nova senha</button>
         </form>
       </section>
     </main>
