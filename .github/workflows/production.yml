@@ -30,6 +30,13 @@ jobs:
 
       - run: npm ci
 
+      # Wrangler resolves assets.directory as soon as it loads wrangler.jsonc.
+      # Materialize dist before any validation or deployment command can invoke it.
+      - name: Prepare production assets
+        run: |
+          npm run assets:prepare
+          test -d dist
+
       - name: Validate production configuration against Cloudflare
         shell: bash
         run: |
@@ -70,7 +77,6 @@ jobs:
         run: |
           npm run check
           npm test
-          npm run assets:prepare
           npx wrangler deploy --dry-run --outdir .wrangler/production-dry-run
 
       - name: Deploy production Worker and custom domain

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "assets:prepare": "node scripts/prepare-assets.mjs",
+    "build": "npm run assets:prepare",
     "predev": "npm run assets:prepare",
     "dev": "wrangler dev",
     "check": "tsc --noEmit",
@@ -13,6 +14,7 @@
     "db:migrate:preview": "wrangler d1 migrations apply DB --env preview --remote",
     "predeploy": "npm run assets:prepare",
     "deploy": "wrangler deploy",
+    "versions:upload": "npm run assets:prepare && wrangler versions upload",
     "predeploy:preview": "npm run assets:prepare",
     "deploy:preview": "wrangler deploy --env preview",
     "admin:create": "node scripts/create-dev-admin.mjs",
