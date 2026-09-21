@@ -78,6 +78,7 @@ jobs:
         if: inputs.operation == 'deploy'
         run: |
           npm run assets:prepare
+          npm run assets:validate
           npx wrangler deploy --env preview --dry-run --outdir .wrangler/preview-dry-run
 
       - name: Configure Worker secrets
@@ -125,6 +126,10 @@ jobs:
           app="$(curl --fail --silent --show-error "$origin$asset_path")"
           grep -Fq 'E-mail ou telefone' <<<"$app"
           grep -Fq 'fetch(`/api/v1/auth/${endpoint}`' <<<"$app"
+          ! grep -Fq 'const loginForm = document.querySelector("#login-form")' <<<"$html$app"
+          ! grep -Fq 'Funcionalidade de recuperação será ativada em breve' <<<"$html$app"
+          test "$(grep -o 'src="/js/app\.[a-f0-9]\{12\}\.js"' <<<"$html" | wc -l)" -eq 1
+          test "$(grep -o 'src="/app\.js"\|src="/js/app\.js"' <<<"$html" | wc -l)" -eq 0
           expected_hash="$(sha256sum public/js/app.js | cut -c1-12)"
           test "$asset_path" = "/js/app.${expected_hash}.js"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "assets:prepare": "node scripts/prepare-assets.mjs",
+    "assets:validate": "node scripts/validate-assets.mjs",
     "predev": "npm run assets:prepare",
     "dev": "wrangler dev",
     "check": "tsc --noEmit",
