@@ -1,0 +1,113 @@
+name: Provision Production Admin
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize D1 changes with the production deployment workflow.
+  group: cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    name: Provision the first production administrator
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Cloudflare authentication and production D1 target
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            test -n "${!name}" || { echo "Missing required GitHub secret: $name"; exit 1; }
+          done
+
+          npx wrangler whoami
+          npm run predb:migrate:production
+
+          databases="$(npx wrangler d1 list --json)"
+          DATABASES="$databases" node - <<'NODE'
+          const databases = JSON.parse(process.env.DATABASES);
+          const expectedName = 'membros-producao';
+          const expectedId = '21fcb86e-cf42-473e-bced-91b5f8228cfd';
+          const matches = databases.filter(({ name }) => name === expectedName);
+          if (matches.length !== 1 || matches[0].uuid !== expectedId) {
+            throw new Error('The approved production D1 name and UUID were not found uniquely.');
+          }
+          console.log('Approved production D1 name and UUID verified.');
+          NODE
+
+      - name: Validate required administrator secrets
+        shell: bash
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+        run: |
+          set -euo pipefail
+          test -n "$ADMIN_PASSWORD" || { echo 'Missing required GitHub secret: ADMIN_PASSWORD'; exit 1; }
+          test -n "$PASSWORD_PEPPER" || { echo 'Missing required GitHub secret: PASSWORD_PEPPER'; exit 1; }
+          echo 'Required administrator secrets are configured.'
+
+      - name: Create production administrator
+        shell: bash
+        env:
+          ADMIN_EMAIL: nutrievandroavila@gmail.com
+          ADMIN_NAME: Evandro Ávila
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+        run: |
+          set -euo pipefail
+          npm run admin:create:production
+
+      - name: Verify production administrator
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(npx wrangler d1 execute membros-producao --env="" --remote --json --command="SELECT email, display_name, role, status, must_change_password FROM users WHERE email='nutrievandroavila@gmail.com';")"
+          RESULT="$result" node - <<'NODE'
+          const response = JSON.parse(process.env.RESULT);
+          if (!Array.isArray(response) || response.length !== 1 || response[0]?.success !== true) {
+            throw new Error('The safe administrator verification query failed.');
+          }
+          const rows = response[0].results;
+          if (!Array.isArray(rows) || rows.length !== 1) {
+            throw new Error('Expected exactly one user with the production administrator email.');
+          }
+          const expected = {
+            email: 'nutrievandroavila@gmail.com',
+            display_name: 'Evandro Ávila',
+            role: 'admin',
+            status: 'active',
+            must_change_password: 1,
+          };
+          for (const [field, value] of Object.entries(expected)) {
+            if (rows[0][field] !== value) throw new Error(`Unexpected administrator field: ${field}`);
+          }
+          console.table(rows);
+          NODE
+
+          count_result="$(npx wrangler d1 execute membros-producao --env="" --remote --json --command="SELECT COUNT(*) AS matching_users FROM users WHERE email='nutrievandroavila@gmail.com';")"
+          RESULT="$count_result" node - <<'NODE'
+          const response = JSON.parse(process.env.RESULT);
+          const count = response?.[0]?.results?.[0]?.matching_users;
+          if (response?.[0]?.success !== true || count !== 1) {
+            throw new Error('Expected exactly one record with the production administrator email.');
+          }
+          console.log('Exactly one production administrator record exists for the configured email.');
+          NODE
