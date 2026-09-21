@@ -35,26 +35,24 @@ O binding `DB` do ambiente principal aponta exclusivamente para o D1
 `npm run db:migrate:production`. Esse comando não seleciona nem modifica o
 ambiente `preview`.
 
-As chaves reais do Turnstile não são versionadas. Antes da publicação, crie no
-painel do Cloudflare um widget **Managed** chamado `membros-producao` e adicione o
-hostname `membros.evandroavila.com.br` (sem `https://` e sem caminho). Na página
-do widget, copie a **Site Key** pública para a variável de ambiente do GitHub
-`PRODUCTION_TURNSTILE_SITE_KEY`, em **Settings → Environments → production →
-Environment variables**. Copie a **Secret Key** para o secret
-`TURNSTILE_SECRET_KEY`, na seção **Environment secrets** do mesmo ambiente.
+O widget **Managed** de produção se chama `membros-producao` e autoriza o hostname
+`membros.evandroavila.com.br` (sem `https://` e sem caminho). Sua Site Key pública
+fica versionada em `wrangler.jsonc`, na variável `TURNSTILE_SITE_KEY`, para que
+todo deploy do ambiente principal publique o mesmo valor.
 
-O workflow substitui `PRODUCTION_TURNSTILE_SITE_KEY` no `wrangler.jsonc`, instala
-a secret key no Worker e só então publica. Para uma publicação manual equivalente,
-materialize a Site Key no arquivo de trabalho (sem commitá-la) e instale apenas a
-Secret Key no Worker principal (sem `--env preview`):
+A Secret Key nunca é versionada nem injetada pelo workflow. Cadastre-a uma única
+vez diretamente no Worker principal como o secret `TURNSTILE_SECRET_KEY` (sem
+`--env preview`):
 
 ```sh
 npx wrangler secret put TURNSTILE_SECRET_KEY --env=""
 ```
 
-Não use valores de exemplo e nunca versione a Secret Key. O widget de preview é
-outro recurso, autoriza somente `membros-preview.evandroavila.com.br` e continua
-usando `PREVIEW_TURNSTILE_SITE_KEY` e secrets do ambiente `preview`.
+O `keep_vars` do `wrangler.jsonc` preserva esse secret e as demais configurações
+de runtime mantidas no painel durante `wrangler deploy --env=""`. Nunca versione a
+Secret Key. O widget de preview é outro recurso, autoriza somente
+`membros-preview.evandroavila.com.br` e continua usando
+`PREVIEW_TURNSTILE_SITE_KEY` e secrets do ambiente `preview`.
 
 ## Ordem esperada
 
