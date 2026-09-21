@@ -9,29 +9,12 @@ if (database !== "membros-preview" || !remote) {
 }
 
 const sql = `
-CREATE TEMP TABLE preview_admin_guard (valid INTEGER NOT NULL CHECK (valid = 1));
-INSERT INTO preview_admin_guard
-SELECT CASE WHEN COUNT(*) = 1 AND MIN(status) = 'active' THEN 1 ELSE 0 END
-FROM users
-WHERE role = 'admin' AND deleted_at IS NULL;
-
 UPDATE users
-SET email = 'nutrievandroavila@gmail.com',
-    phone = '+5511999332373',
-    display_name = 'Evandro Ávila',
-    updated_at = CURRENT_TIMESTAMP
-WHERE role = 'admin' AND status = 'active' AND deleted_at IS NULL;
-
-DELETE FROM preview_admin_guard;
-INSERT INTO preview_admin_guard
-SELECT CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END
-FROM users
-WHERE email = 'nutrievandroavila@gmail.com'
-  AND phone = '+5511999332373'
-  AND display_name = 'Evandro Ávila'
-  AND role = 'admin'
-  AND status = 'active'
-  AND deleted_at IS NULL;
+SET email = 'nutrievandroavila@gmail.com'
+WHERE role = 'admin'
+  AND deleted_at IS NULL
+  AND email <> 'nutrievandroavila@gmail.com'
+  AND (SELECT COUNT(*) FROM users WHERE role = 'admin' AND deleted_at IS NULL) = 1;
 `;
 
 const file = ".update-preview-admin.sql";
