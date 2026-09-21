@@ -479,7 +479,8 @@ proteger a página `/admin`.
 
 1. **Senhas:** preferir Argon2id em implementação auditada compatível com Workers,
    após benchmark do limite de CPU. Fallback explícito: PBKDF2-HMAC-SHA-256 com
-   salt aleatório por usuário e custo vigente documentado. O formato guarda
+   salt aleatório por usuário e 100.000 iterações (limite do Web Crypto no
+   Cloudflare Workers). O formato guarda
    algoritmo/parâmetros para rehash futuro; nunca guardar senha, logá-la ou enviá-la
    a serviços de observabilidade.
 2. **Sessão:** token opaco de pelo menos 256 bits do CSPRNG; somente seu SHA-256 vai

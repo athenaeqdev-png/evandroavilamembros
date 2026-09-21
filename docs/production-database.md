@@ -33,6 +33,11 @@ com segurança a senha e os campos administrativos sem duplicá-la. Em ambos os
 casos a conta fica como `admin`, `active`, com e-mail verificado e
 `must_change_password=1` para o fluxo de troca de senha. O telefone é opcional.
 
+O provisionamento gera um salt aleatório e deriva a senha com
+PBKDF2-HMAC-SHA-256 e 100.000 iterações, limite compatível com o Web Crypto dos
+Cloudflare Workers. Ao alterar esse parâmetro, reprovisione a senha: hashes com
+outro número de iterações não são reutilizados pelo login.
+
 Para evitar que a senha seja gravada no histórico do shell, leia-a de forma
 oculta. O `PASSWORD_PEPPER` deve ser exatamente o secret já configurado no
 Worker de produção.
@@ -42,7 +47,7 @@ read -r -s -p "Senha inicial: " ADMIN_PASSWORD; echo
 export ADMIN_PASSWORD
 export ADMIN_EMAIL="nutrievandroavila@gmail.com"
 # Opcional: export ADMIN_PHONE="11999999999"
-export ADMIN_NAME="Administrador"
+export ADMIN_NAME="Evandro Ávila"
 export PASSWORD_PEPPER # defina por um gerenciador de segredos ou prompt seguro
 npm run admin:create:production
 unset ADMIN_PASSWORD PASSWORD_PEPPER
