@@ -1,45 +1,88 @@
-# Fase 1 — autenticação
+# Fase 1 — autenticação e preview
 
-Esta fase mantém o site principal intocado e não realiza deploy. O Worker serve os
-assets e a API na mesma origem, usa D1 e protege `/inicio` no servidor.
+Esta fase mantém `evandroavila.com.br` intocado. O Worker da área de membros serve
+os assets e a API na mesma origem, usa um D1 próprio e protege `/inicio` e `/perfil`
+no servidor. Nenhum comando de deploy é executado automaticamente.
 
 ## Preparação local
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars
+cat > .dev.vars <<'EOF'
+PASSWORD_PEPPER=gere-um-valor-aleatorio-longo
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+EOF
 npm run db:migrate:local
 npm run dev
 ```
 
-O arquivo `.dev.vars` deve definir `PASSWORD_PEPPER` e `TURNSTILE_SECRET_KEY`.
-O Turnstile usa as chaves públicas de teste da Cloudflare no ambiente local.
+Use a chave secreta de teste oficial do Turnstile apenas localmente. Acesse
+`http://localhost:8787/login`.
 
-## Administrador exclusivamente local
+## Criar o administrador sem versionar a senha
 
-Depois da migration, crie uma conta sem versionar credenciais:
+O script lê a senha e o pepper somente do ambiente, grava apenas PBKDF2-SHA256
+com salt no D1, cria `role=admin`, `status=active` e
+`must_change_password=true`, e sempre apaga o SQL temporário.
 
 ```bash
-DEV_ADMIN_EMAIL=admin@example.test \
-DEV_ADMIN_PASSWORD='uma-senha-local-longa' \
+ADMIN_PHONE='11999332373' \
+ADMIN_PASSWORD='SENHA_TEMPORARIA_FORNECIDA_FORA_DO_GIT' \
 PASSWORD_PEPPER='o-mesmo-valor-de-.dev.vars' \
-node scripts/create-dev-admin.mjs
+npm run admin:create
 ```
 
-O script sempre aponta para o D1 local. O SQL temporário é protegido, ignorado pelo
-Git e removido ao final.
+`ADMIN_EMAIL` é opcional; quando omitido, o script usa um identificador interno
+não entregável porque o esquema legado exige e-mail. A autenticação pode ser feita
+com o telefone, com ou sem `+55`, máscara, espaços ou hífen. Depois do primeiro
+login, altere a senha temporária em `/perfil`.
 
-## Configuração Cloudflare antes de preview/produção
+## Checklist Cloudflare para preview
 
-1. Crie um D1 separado por ambiente e substitua o placeholder `D1_DATABASE_ID` na
-   configuração apropriada; nunca reutilize o banco de produção em preview.
-2. Cadastre `PASSWORD_PEPPER` e `TURNSTILE_SECRET_KEY` com `wrangler secret put`.
-3. Defina `APP_ENV=production`, `APP_ORIGIN=https://membros.evandroavila.com.br`,
-   TTLs e a site key real do Turnstile.
-4. Aplique `migrations/0001_initial.sql` primeiro em preview e valide cadastro,
-   login, persistência, logout, recuperação e redirecionamento de `/inicio`.
-5. A recuperação já cria tokens de uso único no D1 e responde sem enumerar contas;
-   o envio e o consumo por e-mail dependem da escolha do provedor transacional e
-   permanecem deliberadamente fora desta fase.
+1. **D1:** em Workers & Pages → D1 → Create, crie `membros-preview`. Copie o ID
+   para `PREVIEW_D1_DATABASE_ID` em `wrangler.jsonc` (não use o banco de produção).
+2. **Turnstile:** crie um widget Managed para
+   `membros-preview.evandroavila.com.br`. Troque `PREVIEW_TURNSTILE_SITE_KEY` pela
+   site key. Guarde a secret key somente como secret.
+3. **Secrets:** gere um pepper aleatório e diferente de produção; não troque esse
+   valor depois de criar usuários. Cadastre ambos sem colocá-los em arquivo:
 
-Nenhum comando de deploy faz parte dos scripts do projeto.
+   ```bash
+   npx wrangler secret put PASSWORD_PEPPER --env preview
+   npx wrangler secret put TURNSTILE_SECRET_KEY --env preview
+   ```
+
+4. **Migration:** após autenticar o Wrangler, aplique somente no banco de preview:
+
+   ```bash
+   npx wrangler d1 migrations apply membros-preview --remote
+   ```
+
+5. **Administrador de preview:** execute com a mesma senha temporária fornecida
+   por canal seguro e com o mesmo pepper cadastrado no passo 3:
+
+   ```bash
+   ADMIN_PHONE='11999332373' ADMIN_PASSWORD='...' PASSWORD_PEPPER='...' \
+   ADMIN_DATABASE='membros-preview' ADMIN_REMOTE=true npm run admin:create
+   ```
+
+6. **Preview e domínio:** somente após autorização, publique com
+   `npx wrangler deploy --env preview`; no Worker `evandroavilamembros-preview`,
+   adicione a Custom Domain `membros-preview.evandroavila.com.br`. Esse host já é
+   o valor de `APP_ORIGIN` preparado na configuração. O domínio principal não é
+   alterado.
+
+## Validação manual
+
+No domínio de preview, valide:
+
+1. cadastro → redirecionamento a `/inicio`;
+2. atualização da página mantendo a sessão;
+3. logout → tentativa de `/inicio` redireciona a `/login`;
+4. login por e-mail e por telefone;
+5. `/perfil` → alteração da senha temporária;
+6. “esqueci minha senha” retorna mensagem neutra.
+
+A recuperação cria token opaco de uso único no D1 sem enumerar contas. O envio e
+o consumo do link por e-mail ainda dependem de um provedor transacional e, por
+isso, o fluxo completo de redefinição continua pendente.
