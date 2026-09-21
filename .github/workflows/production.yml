@@ -18,9 +18,9 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
-      PRODUCTION_DATABASE_UUID: ${{ vars.PRODUCTION_DATABASE_UUID }}
       PRODUCTION_TURNSTILE_SITE_KEY: ${{ vars.PRODUCTION_TURNSTILE_SITE_KEY }}
+      TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+      PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,26 +37,36 @@ jobs:
           npm run assets:prepare
           test -d dist
 
-      - name: Validate production configuration against Cloudflare
+      - name: Validate production credentials and security configuration
         shell: bash
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PRODUCTION_DATABASE_NAME PRODUCTION_DATABASE_UUID PRODUCTION_TURNSTILE_SITE_KEY; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PRODUCTION_TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY PASSWORD_PEPPER; do
             test -n "${!name}" || { echo "Missing production secret/variable: $name"; exit 1; }
           done
-          case "$PRODUCTION_DATABASE_NAME" in
-            membros-local|membros-preview) echo 'Production cannot use a local or preview database.'; exit 1 ;;
-          esac
-          [[ "$PRODUCTION_DATABASE_UUID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo 'Invalid production D1 UUID.'; exit 1; }
           [[ "$PRODUCTION_TURNSTILE_SITE_KEY" == 0x* ]] || { echo 'Invalid production Turnstile Site Key.'; exit 1; }
           npx wrangler whoami
+
+      - name: Resolve the exclusive production D1 database
+        shell: bash
+        run: |
+          set -euo pipefail
           databases="$(npx wrangler d1 list --json)"
-          DATABASES="$databases" node - <<'NODE'
+          database_uuid="$(DATABASES="$databases" node - <<'NODE'
           const databases = JSON.parse(process.env.DATABASES);
-          const match = databases.find(({ name, uuid }) =>
-            name === process.env.PRODUCTION_DATABASE_NAME && uuid === process.env.PRODUCTION_DATABASE_UUID);
-          if (!match) throw new Error('Configured production D1 name/UUID does not match the Cloudflare account');
+          const production = databases.filter(({ name }) => name === 'membros-producao');
+          if (production.length > 1) throw new Error('More than one membros-producao database exists');
+          process.stdout.write(production[0]?.uuid ?? '');
           NODE
+          )"
+          if [ -z "$database_uuid" ]; then
+            npx wrangler d1 create membros-producao
+            databases="$(npx wrangler d1 list --json)"
+            database_uuid="$(DATABASES="$databases" node -e \
+              "const values=JSON.parse(process.env.DATABASES); const value=values.find(({name})=>name==='membros-producao'); process.stdout.write(value?.uuid ?? '')")"
+          fi
+          [[ "$database_uuid" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo 'Cloudflare did not return a valid production D1 UUID.'; exit 1; }
+          echo "PRODUCTION_DATABASE_UUID=$database_uuid" >> "$GITHUB_ENV"
 
       - name: Materialize verified public bindings
         shell: bash
@@ -66,7 +76,7 @@ jobs:
           const path = 'wrangler.jsonc';
           let config = fs.readFileSync(path, 'utf8');
           for (const [token, value] of [
-            ['PRODUCTION_DATABASE_NAME', process.env.PRODUCTION_DATABASE_NAME],
+            ['PRODUCTION_DATABASE_NAME', 'membros-producao'],
             ['PRODUCTION_DATABASE_UUID', process.env.PRODUCTION_DATABASE_UUID],
             ['PRODUCTION_TURNSTILE_SITE_KEY', process.env.PRODUCTION_TURNSTILE_SITE_KEY],
           ]) config = config.replace(token, value);
@@ -77,7 +87,17 @@ jobs:
         run: |
           npm run check
           npm test
-          npx wrangler deploy --dry-run --outdir .wrangler/production-dry-run
+          npx wrangler deploy --env="" --dry-run --outdir .wrangler/production-dry-run
+
+      - name: Configure production Worker secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$TURNSTILE_SECRET_KEY" | npx wrangler secret put TURNSTILE_SECRET_KEY --env=""
+          printf '%s' "$PASSWORD_PEPPER" | npx wrangler secret put PASSWORD_PEPPER --env=""
+
+      - name: Apply production migrations
+        run: npm run db:migrate:production
 
       - name: Deploy production Worker and custom domain
         run: npm run deploy
@@ -88,4 +108,19 @@ jobs:
           set -euo pipefail
           origin='https://membros.evandroavila.com.br'
           curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$origin/login" >/dev/null
-          curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$origin/api/v1/config" >/dev/null
+          config="$(curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$origin/api/v1/config")"
+          CONFIG="$config" node - <<'NODE'
+          const config = JSON.parse(process.env.CONFIG);
+          if (config.turnstileSiteKey !== process.env.PRODUCTION_TURNSTILE_SITE_KEY) {
+            throw new Error('Published Turnstile Site Key does not match production');
+          }
+          NODE
+          html="$(curl --fail "$origin/login")"
+          asset_path="$(sed -n 's|.*src="\(/js/app\.[a-f0-9]\{12\}\.js\)".*|\1|p' <<<"$html")"
+          test -n "$asset_path"
+          app="$(curl --fail "$origin$asset_path")"
+          ! grep -Eq 'localhost|membros-preview' <<<"$app"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H "Origin: $origin" -H 'Content-Type: application/json' \
+            --data '{"identifier":"smoke@example.com","password":"invalid","turnstileToken":"invalid"}' \
+            "$origin/api/v1/auth/login")" = '400'
