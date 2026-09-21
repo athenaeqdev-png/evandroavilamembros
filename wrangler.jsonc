@@ -7,13 +7,12 @@
   "routes": [
     { "pattern": "membros.evandroavila.com.br", "custom_domain": true }
   ],
-  "d1_databases": [{ "binding": "DB", "database_name": "PRODUCTION_DATABASE_NAME", "database_id": "PRODUCTION_DATABASE_UUID" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "membros-producao", "database_id": "21fcb86e-cf42-473e-bced-91b5f8228cfd" }],
   "vars": {
     "APP_ENV": "production",
     "APP_ORIGIN": "https://membros.evandroavila.com.br",
     "SESSION_TTL_SECONDS": "2592000",
-    "PASSWORD_RESET_TTL_SECONDS": "3600",
-    "TURNSTILE_SITE_KEY": "PRODUCTION_TURNSTILE_SITE_KEY"
+    "PASSWORD_RESET_TTL_SECONDS": "3600"
   },
   "env": {
     "preview": {
