@@ -1,1 +1,52 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Perfil | Jornada Metabólica</title><link rel="stylesheet" href="/css/style.css"></head><body class="dashboard-body"><header class="topbar"><img src="/logo-oficial.png" alt="Evandro Ávila"><a href="/inicio">Voltar</a></header><main class="dashboard"><p class="eyebrow">Seu perfil</p><h1>Alterar senha</h1><section class="welcome-card"><form id="password-form"><label>Senha atual<input name="currentPassword" type="password" autocomplete="current-password" required></label><label>Nova senha<input name="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label><p id="status" class="form-status" role="alert"></p><button class="submit-button">Salvar nova senha</button></form></section></main><script src="/js/profile.js" defer></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Perfil | Jornada Metabólica</title>
+    <link rel="stylesheet" href="/css/style.css">
+  </head>
+  <body class="dashboard-body profile-body">
+    <header class="topbar profile-header">
+      <img src="/logo-oficial.png" alt="Evandro Ávila">
+      <a class="profile-back" href="/inicio" aria-label="Voltar para a área de membros">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        Voltar
+      </a>
+    </header>
+
+    <main class="profile-main">
+      <div class="profile-heading">
+        <p class="eyebrow">Seu perfil</p>
+        <h1>Crie sua nova senha</h1>
+        <p>Por segurança, altere sua senha inicial antes de acessar sua área de membros.</p>
+      </div>
+
+      <section class="profile-card" aria-label="Alteração de senha">
+        <form id="password-form" class="profile-form">
+          <div class="profile-field">
+            <label for="current-password">Senha atual</label>
+            <div class="password-input">
+              <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" required>
+              <button class="password-toggle" type="button" aria-controls="current-password" aria-label="Exibir senha atual">Exibir</button>
+            </div>
+          </div>
+
+          <div class="profile-field">
+            <label for="new-password">Nova senha</label>
+            <div class="password-input">
+              <input id="new-password" name="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="new-password-hint" required>
+              <button class="password-toggle" type="button" aria-controls="new-password" aria-label="Exibir nova senha">Exibir</button>
+            </div>
+            <p id="new-password-hint" class="field-hint">Use pelo menos 12 caracteres.</p>
+          </div>
+
+          <p id="status" class="form-status profile-status" role="status" aria-live="polite"></p>
+          <button class="submit-button" type="submit">Salvar nova senha</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="/js/profile.js" defer></script>
+  </body>
+</html>
