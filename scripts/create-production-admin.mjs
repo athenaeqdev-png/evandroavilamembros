@@ -31,7 +31,8 @@ if (!password || password.length < 12 || password.length > 128) throw new Error(
 if (!pepper) throw new Error("Defina PASSWORD_PEPPER com o mesmo secret configurado no Worker de produção.");
 
 const salt = randomBytes(16);
-const iterations = 210000;
+// Keep this within the Cloudflare Workers Web Crypto PBKDF2 limit.
+const iterations = 100000;
 const hash = pbkdf2Sync(password + pepper, salt, iterations, 32, "sha256").toString("base64");
 const parameters = JSON.stringify({ iterations, salt: salt.toString("base64") });
 const now = new Date().toISOString();

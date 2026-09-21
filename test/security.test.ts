@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { hashPassword, randomToken, verifyPassword } from "../src/security";
+import { hashPassword, PASSWORD_ITERATIONS, randomToken, verifyPassword } from "../src/security";
 import worker, { normalizeLoginIdentifier, normalizePhone } from "../src/index";
 describe("segurança", () => {
   it("fixa a Site Key de produção e preserva secrets de runtime", () => {
@@ -23,12 +23,22 @@ describe("segurança", () => {
     expect(script).toContain("role='admin'");
     expect(script).toContain("status='active'");
     expect(script).toContain("deleted_at=NULL");
+    expect(script).toContain("const iterations = 100000");
+    expect(script).not.toMatch(/210_?000/);
     expect(script).toContain('const phoneInput = process.env.ADMIN_PHONE?.trim() || ""');
     expect(script).toContain("delete childEnvironment.ADMIN_PASSWORD");
     expect(script).toContain("delete childEnvironment.PASSWORD_PEPPER");
     expect(script).not.toContain("membros-preview");
   });
   it("faz hash de senha com salt e verifica sem guardar o texto", async () => { const value=await hashPassword("uma senha bastante segura","pepper"); expect(value.hash).not.toContain("uma senha"); expect(await verifyPassword("uma senha bastante segura","pepper",value.hash,value.parameters)).toBe(true); expect(await verifyPassword("errada","pepper",value.hash,value.parameters)).toBe(false); });
+  it("respeita o limite de iterações PBKDF2 do Cloudflare Workers", async () => {
+    expect(PASSWORD_ITERATIONS).toBe(100_000);
+    expect(PASSWORD_ITERATIONS).toBeLessThanOrEqual(100_000);
+
+    const value = await hashPassword("uma senha bastante segura", "pepper", new Uint8Array(16));
+    expect(JSON.parse(value.parameters).iterations).toBe(PASSWORD_ITERATIONS);
+    await expect(verifyPassword("uma senha bastante segura", "pepper", value.hash, value.parameters)).resolves.toBe(true);
+  });
   it("gera tokens opacos com pelo menos 256 bits", () => expect(randomToken().length).toBeGreaterThanOrEqual(43));
   it("normaliza telefones brasileiros com máscara ou código do país", () => { expect(normalizePhone("(11) 99933-2373")).toBe("+5511999332373"); expect(normalizePhone("+55 11 99933-2373")).toBe("+5511999332373"); expect(normalizePhone("telefone inválido")).toBe(""); });
   it("prepara e-mail ou telefone como identificador do mesmo login", () => {
