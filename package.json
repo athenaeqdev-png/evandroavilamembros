@@ -7,6 +7,8 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply membros-local --local",
+    "db:migrate:preview": "wrangler d1 migrations apply DB --env preview --remote",
+    "deploy:preview": "wrangler deploy --env preview",
     "admin:create": "node scripts/create-dev-admin.mjs"
   },
   "devDependencies": { "@cloudflare/workers-types": "^4.20260919.0", "typescript": "^5.9.2", "vitest": "^3.2.4", "wrangler": "^4.38.0" }

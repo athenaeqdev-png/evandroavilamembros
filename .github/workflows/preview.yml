@@ -1,0 +1,102 @@
+name: Preview Cloudflare
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Verificar autenticação ou publicar o preview
+        required: true
+        default: verify
+        type: choice
+        options:
+          - verify
+          - deploy
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    name: ${{ inputs.operation == 'deploy' && 'Deploy preview' || 'Verify Cloudflare access' }}
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install
+
+      - name: Validate Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing Actions secret: CLOUDFLARE_API_TOKEN'; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'Missing Actions secret: CLOUDFLARE_ACCOUNT_ID'; exit 1; }
+          npx wrangler whoami
+          npx wrangler d1 list
+
+      - name: Validate preview configuration
+        if: inputs.operation == 'deploy'
+        env:
+          PREVIEW_D1_DATABASE_ID: ${{ vars.PREVIEW_D1_DATABASE_ID }}
+          PREVIEW_TURNSTILE_SITE_KEY: ${{ vars.PREVIEW_TURNSTILE_SITE_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+          PREVIEW_ADMIN_PASSWORD: ${{ secrets.PREVIEW_ADMIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in PREVIEW_D1_DATABASE_ID PREVIEW_TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY PASSWORD_PEPPER PREVIEW_ADMIN_PASSWORD; do
+            test -n "${!name}" || { echo "Missing preview Actions secret/variable: $name"; exit 1; }
+          done
+          test "${#PREVIEW_ADMIN_PASSWORD}" -ge 12 || { echo 'PREVIEW_ADMIN_PASSWORD must contain at least 12 characters'; exit 1; }
+          node - <<'NODE'
+          import fs from 'node:fs';
+          const path = 'wrangler.jsonc';
+          let config = fs.readFileSync(path, 'utf8');
+          config = config.replace('PREVIEW_D1_DATABASE_ID', process.env.PREVIEW_D1_DATABASE_ID)
+            .replace('PREVIEW_TURNSTILE_SITE_KEY', process.env.PREVIEW_TURNSTILE_SITE_KEY);
+          if (config.includes('PREVIEW_D1_DATABASE_ID') || config.includes('PREVIEW_TURNSTILE_SITE_KEY')) {
+            throw new Error('Preview placeholders were not replaced');
+          }
+          fs.writeFileSync(path, config);
+          NODE
+
+      - name: Configure Worker secrets
+        if: inputs.operation == 'deploy'
+        env:
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$TURNSTILE_SECRET_KEY" | npx wrangler secret put TURNSTILE_SECRET_KEY --env preview
+          printf '%s' "$PASSWORD_PEPPER" | npx wrangler secret put PASSWORD_PEPPER --env preview
+
+      - name: Apply preview migrations
+        if: inputs.operation == 'deploy'
+        run: npm run db:migrate:preview
+
+      - name: Create initial preview administrator
+        if: inputs.operation == 'deploy'
+        env:
+          ADMIN_PHONE: '11999332373'
+          ADMIN_PASSWORD: ${{ secrets.PREVIEW_ADMIN_PASSWORD }}
+          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+          ADMIN_DATABASE: membros-preview
+          ADMIN_REMOTE: 'true'
+        run: npm run admin:create
+
+      - name: Deploy preview Worker and custom domain
+        if: inputs.operation == 'deploy'
+        run: npm run deploy:preview

@@ -39,6 +39,31 @@ login, altere a senha temporária em `/perfil`.
 
 ## Checklist Cloudflare para preview
 
+### Configuração do GitHub Actions
+
+Em **Settings → Secrets and variables → Actions** do repositório, cadastre:
+
+| Tipo | Nome exato | Conteúdo |
+|---|---|---|
+| Secret | `CLOUDFLARE_API_TOKEN` | token restrito usado pelo Wrangler |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | ID da conta Cloudflare |
+| Secret | `TURNSTILE_SECRET_KEY` | secret key do widget de preview |
+| Secret | `PASSWORD_PEPPER` | valor aleatório longo e exclusivo do preview |
+| Secret | `PREVIEW_ADMIN_PASSWORD` | senha temporária (mínimo de 12 caracteres) enviada ao administrador por canal seguro |
+| Variable | `PREVIEW_D1_DATABASE_ID` | UUID exibido na página do D1 `membros-preview` |
+| Variable | `PREVIEW_TURNSTILE_SITE_KEY` | site key pública do widget `membros-preview` |
+
+Não envie os três últimos valores secretos por chat e não reutilize valores de
+produção. Em **Actions → Preview Cloudflare → Run workflow**, a opção
+`verify` testa apenas a autenticação e lista os bancos D1. A opção `deploy`
+valida todas as configurações, instala os secrets no Worker, aplica as migrations,
+cria o administrador e publica exclusivamente o ambiente `preview`.
+
+O workflow nunca referencia um ambiente de produção. Se a associação do domínio
+falhar por permissão, não amplie o token genericamente: consulte a mensagem do
+Wrangler e adicione somente a permissão indicada para gerenciar o Custom Domain
+na zona `evandroavila.com.br`.
+
 1. **D1:** em Workers & Pages → D1 → Create, crie `membros-preview`. Copie o ID
    para `PREVIEW_D1_DATABASE_ID` em `wrangler.jsonc` (não use o banco de produção).
 2. **Turnstile:** crie um widget Managed para
