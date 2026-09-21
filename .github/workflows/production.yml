@@ -120,6 +120,12 @@ jobs:
           test -n "$asset_path"
           app="$(curl --fail "$origin$asset_path")"
           ! grep -Eq 'localhost|membros-preview' <<<"$app"
+          ! grep -Fq 'Cadastre-se' <<<"$app"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$origin/cadastro")" = '302'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H "Origin: $origin" -H 'Content-Type: application/json' \
+            --data '{"email":"smoke@example.com","password":"senha-segura-123","name":"Membro"}' \
+            "$origin/api/v1/auth/register")" = '404'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             -H "Origin: $origin" -H 'Content-Type: application/json' \
             --data '{"identifier":"smoke@example.com","password":"invalid","turnstileToken":"invalid"}' \

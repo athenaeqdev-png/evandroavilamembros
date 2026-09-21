@@ -57,15 +57,6 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
     if (!/^[01]x[A-Za-z0-9_-]{10,}$/.test(env.TURNSTILE_SITE_KEY || "")) return json({ error: "Configuração de segurança indisponível." }, 503);
     return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY });
   }
-  if (path === "/api/v1/auth/register" && request.method === "POST") {
-    const email = normalizeEmail(data?.email), password = data?.password, name = typeof data?.name === "string" ? data.name.trim() : "";
-    if (!validEmail(email) || typeof password !== "string" || password.length < 12 || password.length > 128 || name.length < 2 || name.length > 100) return json({ error: "Confira nome, e-mail e senha (mínimo de 12 caracteres)." }, 422);
-    if (!await turnstile(data?.turnstileToken, request, env)) return json({ error: "Verificação de segurança inválida." }, 400);
-    const exists = await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if (exists) return json({ error: "Não foi possível concluir o cadastro." }, 409);
-    const passwordData = await hashPassword(password, env.PASSWORD_PEPPER), id = crypto.randomUUID(), now = new Date().toISOString();
-    await env.DB.prepare("INSERT INTO users(id,email,password_hash,password_algorithm,password_parameters,role,status,display_name,email_verified_at,created_at,updated_at) VALUES(?,?,?,?,?,'member','active',?,?,?,?)").bind(id,email,passwordData.hash,"pbkdf2-sha256",passwordData.parameters,name,now,now,now).run();
-    return json({ user: { id, email, displayName: name, role: "member", mustChangePassword: false } }, 201, await sessionHeaders(id,request,env));
-  }
   if (path === "/api/v1/auth/login" && request.method === "POST") {
     const identifier = typeof data?.identifier === "string" ? data.identifier : data?.email, { email, phone } = normalizeLoginIdentifier(identifier), password = data?.password;
     if (!await turnstile(data?.turnstileToken, request, env)) return json({ error: "Verificação de segurança inválida." }, 400);
@@ -81,4 +72,4 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
   return json({ error: "Rota não encontrada." }, 404);
 }
 
-export default { async fetch(request: Request, env: Env): Promise<Response> { const url=new URL(request.url); let response:Response; if(url.pathname.startsWith("/api/")) response=await api(request,env,url.pathname); else if(url.pathname==="/inicio"||url.pathname==="/perfil"){ if(!await currentUser(request,env)) response=Response.redirect(`${url.origin}/login`,302); else response=await env.ASSETS.fetch(new Request(new URL(url.pathname==="/perfil"?"/perfil.html":"/inicio.html",url),request)); } else { response=await env.ASSETS.fetch(request); } return secureHeaders(assetCacheHeaders(response,url.pathname)); } };
+export default { async fetch(request: Request, env: Env): Promise<Response> { const url=new URL(request.url); let response:Response; if(url.pathname.startsWith("/api/")) response=await api(request,env,url.pathname); else if(url.pathname==="/cadastro"||url.pathname==="/cadastro/") response=Response.redirect(`${url.origin}/login`,302); else if(url.pathname==="/inicio"||url.pathname==="/perfil"){ if(!await currentUser(request,env)) response=Response.redirect(`${url.origin}/login`,302); else response=await env.ASSETS.fetch(new Request(new URL(url.pathname==="/perfil"?"/perfil.html":"/inicio.html",url),request)); } else { response=await env.ASSETS.fetch(request); } return secureHeaders(assetCacheHeaders(response,url.pathname)); } };
