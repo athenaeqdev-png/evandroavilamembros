@@ -11,6 +11,7 @@ Com uma credencial Cloudflare autorizada disponível no ambiente:
 
 ```sh
 npm run db:migrate:production
+npm run db:validate:production
 npx wrangler d1 migrations list membros-producao --env="" --remote
 npx wrangler d1 execute membros-producao --env="" --remote --command \
   "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name;"
@@ -18,6 +19,10 @@ npx wrangler d1 execute membros-producao --env="" --remote --command \
 
 As migrations são idempotentemente controladas pelo Wrangler. Não copie dados
 do preview e não apague ou recrie o banco para inicializá-lo.
+
+O deploy de produção executa esses dois scripts antes de publicar o Worker. O
+primeiro possui uma verificação prévia que exige exatamente o nome e UUID acima;
+o segundo falha se alguma das 18 tabelas do projeto não estiver presente.
 
 ## Provisionar o primeiro administrador
 
