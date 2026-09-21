@@ -72,6 +72,10 @@ jobs:
           fs.writeFileSync(path, config);
           NODE
 
+      - name: Validate Wrangler preview schema
+        if: inputs.operation == 'deploy'
+        run: npx wrangler deploy --env preview --dry-run --outdir .wrangler/preview-dry-run
+
       - name: Configure Worker secrets
         if: inputs.operation == 'deploy'
         env:
@@ -99,4 +103,4 @@ jobs:
 
       - name: Deploy preview Worker and custom domain
         if: inputs.operation == 'deploy'
-        run: npm run deploy:preview
+        run: npx wrangler deploy --env preview
