@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: 22
 
-      - run: npm install
+      - run: npm ci
 
       - name: Validate Cloudflare credentials
         shell: bash
