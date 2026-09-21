@@ -12,6 +12,7 @@ export const normalizePhone = (value: unknown) => {
   if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;
   return digits.length >= 12 && digits.length <= 15 ? `+${digits}` : "";
 };
+export const normalizeLoginIdentifier = (value: unknown) => ({ email: normalizeEmail(value), phone: normalizePhone(value) });
 const cookie = (request: Request, name: string) => request.headers.get("cookie")?.split(";").map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.slice(name.length + 1);
 
 function secureHeaders(response: Response): Response {
@@ -57,10 +58,10 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
     return json({ user: { id, email, displayName: name, role: "member", mustChangePassword: false } }, 201, await sessionHeaders(id,request,env));
   }
   if (path === "/api/v1/auth/login" && request.method === "POST") {
-    const identifier = typeof data?.identifier === "string" ? data.identifier.trim() : normalizeEmail(data?.email), email = normalizeEmail(identifier), phone = normalizePhone(identifier), password = data?.password;
+    const identifier = typeof data?.identifier === "string" ? data.identifier : data?.email, { email, phone } = normalizeLoginIdentifier(identifier), password = data?.password;
     if (!await turnstile(data?.turnstileToken, request, env)) return json({ error: "Verificação de segurança inválida." }, 400);
     const user = await env.DB.prepare("SELECT * FROM users WHERE (email=? OR phone=?) AND deleted_at IS NULL").bind(email,phone).first<User>();
-    if (!user || user.status !== "active" || typeof password !== "string" || !await verifyPassword(password, env.PASSWORD_PEPPER, user.password_hash, user.password_parameters)) return json({ error: "Telefone/e-mail ou senha inválidos." }, 401);
+    if (!user || user.status !== "active" || typeof password !== "string" || !await verifyPassword(password, env.PASSWORD_PEPPER, user.password_hash, user.password_parameters)) return json({ error: "E-mail/telefone ou senha inválidos." }, 401);
     const now = new Date().toISOString(); await env.DB.prepare("UPDATE users SET last_login_at=?,updated_at=? WHERE id=?").bind(now,now,user.id).run();
     return json({ user: { id:user.id,email:user.email,displayName:user.display_name,role:user.role,mustChangePassword:!!user.must_change_password } }, 200, await sessionHeaders(user.id,request,env));
   }
