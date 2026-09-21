@@ -6,6 +6,7 @@ describe("segurança", () => {
   it("fixa a Site Key de produção e preserva secrets de runtime", () => {
     const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
     expect(config.keep_vars).toBe(true);
+    expect(config.assets.run_worker_first).toBe(true);
     expect(config.vars.TURNSTILE_SITE_KEY).toBe("0x4AAAAAAE_Epyppm4T7SENx");
     expect(config.vars).not.toHaveProperty("TURNSTILE_SECRET_KEY");
     expect(config.env.preview.vars.TURNSTILE_SITE_KEY).toBe("PREVIEW_TURNSTILE_SITE_KEY");
@@ -50,10 +51,20 @@ describe("segurança", () => {
     expect(app).not.toContain('href="/cadastro"');
     expect(app).not.toContain('kind:"register"');
   });
-  it("redireciona a antiga rota de cadastro para o login", async () => {
-    const response = await worker.fetch(new Request("https://membros.evandroavila.com.br/cadastro"), {} as never);
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("https://membros.evandroavila.com.br/login");
+  it("redireciona rotas antigas de cadastro para o login", async () => {
+    for (const path of ["/cadastro", "/cadastro/", "/registro", "/registro/", "/register", "/register/"]) {
+      const response = await worker.fetch(new Request(`https://membros.evandroavila.com.br${path}`), {} as never);
+      expect(response.status, path).toBe(302);
+      expect(response.headers.get("location"), path).toBe("https://membros.evandroavila.com.br/login");
+    }
+  });
+  it("serve /login e /login/ pelo Worker para visitantes", async () => {
+    const fetch = async () => new Response("login");
+    const env = { ASSETS: { fetch }, DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } } as never;
+    for (const path of ["/login", "/login/"]) {
+      const response = await worker.fetch(new Request(`https://membros.evandroavila.com.br${path}`), env);
+      expect(response.status, path).toBe(200);
+    }
   });
   it("protege a sala de aula /inicio contra acesso sem sessão", async () => {
     const env = { DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } } as never;
