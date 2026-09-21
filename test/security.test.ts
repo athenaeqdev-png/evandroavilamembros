@@ -84,11 +84,13 @@ describe("segurança", () => {
       expect(response.status, path).toBe(200);
     }
   });
-  it("protege a sala de aula /inicio contra acesso sem sessão", async () => {
+  it("protege perfil e início contra acesso sem sessão", async () => {
     const env = { DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } } as never;
-    const response = await worker.fetch(new Request("https://membros.evandroavila.com.br/inicio"), env);
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("https://membros.evandroavila.com.br/login");
+    for (const path of ["/perfil", "/inicio"]) {
+      const response = await worker.fetch(new Request(`https://membros.evandroavila.com.br${path}`), env);
+      expect(response.status, path).toBe(302);
+      expect(response.headers.get("location"), path).toBe("https://membros.evandroavila.com.br/login");
+    }
   });
   it("mantém a sessão válida e evita apresentar o login novamente", async () => {
     const user = { id:"user-1", email:"membro@example.com", phone:null, display_name:"Membro", password_hash:"", password_parameters:"", role:"member", status:"active", must_change_password:0 };
@@ -105,6 +107,51 @@ describe("segurança", () => {
       expect(response.status, path).toBe(302);
       expect(response.headers.get("location"), path).toBe("https://membros.evandroavila.com.br/perfil");
     }
+  });
+  it("não cria loop ao servir perfil e início para uma sessão autenticada", async () => {
+    const authenticatedRequest = (path: string) => new Request(`https://membros.evandroavila.com.br${path}`, { headers:{ cookie:"__Host-session=sessao-valida" } });
+    const user = { id:"user-1", email:"membro@example.com", phone:null, display_name:"Membro", password_hash:"", password_parameters:"", role:"member", status:"active", must_change_password:1 };
+    const assetPaths: string[] = [];
+    const env = {
+      APP_ENV:"production",
+      DB: { prepare: () => ({ bind: () => ({ first: async () => user }) }) },
+      ASSETS: { fetch: async (request: Request) => {
+        const pathname = new URL(request.url).pathname;
+        assetPaths.push(pathname);
+        // Cloudflare canonicaliza URLs .html para a rota sem extensão. Repassar
+        // /perfil.html ao binding reproduziria o ERR_TOO_MANY_REDIRECTS.
+        return pathname.endsWith(".html") ? Response.redirect(new URL(pathname.replace(/\.html$/, ""), request.url), 302) : new Response("asset");
+      } },
+    } as never;
+
+    const profile = await worker.fetch(authenticatedRequest("/perfil"), env);
+    expect(profile.status).toBe(200);
+    expect(profile.headers.get("location")).toBeNull();
+    expect(assetPaths).toEqual(["/perfil"]);
+
+    const start = await worker.fetch(authenticatedRequest("/inicio"), env);
+    expect(start.status).toBe(302);
+    expect(start.headers.get("location")).toBe("https://membros.evandroavila.com.br/perfil");
+  });
+  it("libera perfil e início depois da troca obrigatória de senha", async () => {
+    const user = { id:"user-1", email:"membro@example.com", phone:null, display_name:"Membro", password_hash:"", password_parameters:"", role:"member", status:"active", must_change_password:0 };
+    const served: string[] = [];
+    const env = {
+      APP_ENV:"production",
+      DB: { prepare: () => ({ bind: () => ({ first: async () => user }) }) },
+      ASSETS: { fetch: async (request: Request) => { served.push(new URL(request.url).pathname); return new Response("asset"); } },
+    } as never;
+    for (const path of ["/perfil", "/inicio"]) {
+      const response = await worker.fetch(new Request(`https://membros.evandroavila.com.br${path}`, { headers:{ cookie:"__Host-session=sessao-valida" } }), env);
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get("location"), path).toBeNull();
+    }
+    expect(served).toEqual(["/perfil", "/inicio"]);
+  });
+  it("mantém o frontend do perfil na própria página durante a troca obrigatória", () => {
+    const profile = readFileSync(new URL("../public/js/profile.js", import.meta.url), "utf8");
+    expect(profile).not.toContain('location.replace("/perfil")');
+    expect(profile).toContain('if(mandatoryChange)location.replace("/inicio")');
   });
   it("protege também as variantes com barra final", async () => {
     const env = { DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } } as never;
