@@ -5,5 +5,6 @@ const phoneDigits=(process.env.ADMIN_PHONE||"").replace(/\D/g,""), phone=phoneDi
 if(!phone||!password||password.length<12||!pepper) throw new Error("Defina ADMIN_PHONE, ADMIN_PASSWORD (12+ caracteres) e PASSWORD_PEPPER.");
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("DEV_ADMIN_EMAIL inválido.");
 const salt=randomBytes(16),iterations=210000,hash=pbkdf2Sync(password+pepper,salt,iterations,32,"sha256").toString("base64"),parameters=JSON.stringify({iterations,salt:salt.toString("base64")}),now=new Date().toISOString(),quote=value=>`'${String(value).replaceAll("'","''")}'`;
-const sql=`INSERT INTO users(id,email,phone,password_hash,password_algorithm,password_parameters,role,status,must_change_password,display_name,email_verified_at,created_at,updated_at) VALUES(${[randomUUID(),email,phone,hash,"pbkdf2-sha256",parameters,"admin","active",1,name,now,now,now].map(quote).join(",")});`;
+const values=[randomUUID(),email,phone,hash,"pbkdf2-sha256",parameters,"admin","active",1,name,now,now,now].map(quote).join(",");
+const sql=`INSERT INTO users(id,email,phone,password_hash,password_algorithm,password_parameters,role,status,must_change_password,display_name,email_verified_at,created_at,updated_at) SELECT ${values} WHERE NOT EXISTS (SELECT 1 FROM users WHERE email=${quote(email)} OR phone=${quote(phone)});`;
 const file=".seed-admin.sql";writeFileSync(file,sql,{mode:0o600});try{execFileSync("npx",["wrangler","d1","execute",database,remote?"--remote":"--local","--file",file],{stdio:"inherit"})}finally{rmSync(file,{force:true})}
