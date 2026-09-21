@@ -4,13 +4,16 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-19",
   "assets": { "binding": "ASSETS", "directory": "./dist", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
-  "d1_databases": [{ "binding": "DB", "database_name": "membros-local", "database_id": "D1_DATABASE_ID" }],
+  "routes": [
+    { "pattern": "membros.evandroavila.com.br", "custom_domain": true }
+  ],
+  "d1_databases": [{ "binding": "DB", "database_name": "PRODUCTION_DATABASE_NAME", "database_id": "PRODUCTION_DATABASE_UUID" }],
   "vars": {
-    "APP_ENV": "development",
-    "APP_ORIGIN": "http://localhost:8787",
+    "APP_ENV": "production",
+    "APP_ORIGIN": "https://membros.evandroavila.com.br",
     "SESSION_TTL_SECONDS": "2592000",
     "PASSWORD_RESET_TTL_SECONDS": "3600",
-    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA"
+    "TURNSTILE_SITE_KEY": "PRODUCTION_TURNSTILE_SITE_KEY"
   },
   "env": {
     "preview": {
